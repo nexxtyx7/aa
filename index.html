@@ -220,7 +220,7 @@
   </main>
   <footer class="footer">
     <div class="footer-top"><a class="brand footer-brand" href="#inicio"><span class="brand-name">ANDRÉ<span>AÉREAS</span></span></a><div class="footer-signoff">ANDRÉ AÉREAS · CONECTANDO DESTINOS <span>↗</span></div></div>
-    <div class="footer-columns"><div><span class="footer-label">EXPLORE</span><a href="#destinos">Destinos</a><a href="#ofertas">Inspiração e ofertas</a><a href="#experiencia">Experiência a bordo</a><a href="#reservar">Buscar voos</a><a href="/conta">Minha conta</a></div><div><span class="footer-label">INFORMAÇÕES</span><a href="#sobre">Sobre a André Aéreas</a><a href="#contato">Atendimento</a><a href="#contato">Bagagem e documentos</a><a href="#contato">Perguntas frequentes</a></div><div id="contato"><span class="footer-label">FALE COM A GENTE</span><a href="https://wa.me/553591793515?text=Ol%C3%A1%21%20Gostaria%20de%20saber%20mais%20sobre%20as%20passagens%20e%20os%20servi%C3%A7os%20da%20Andr%C3%A9%20A%C3%A9reas." target="_blank" rel="noopener noreferrer">WhatsApp ↗</a><a href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer">Instagram ↗</a><a href="mailto:">E-mail: canal não configurado</a></div><div class="footer-social"><span class="footer-label">ACOMPANHE A JORNADA</span><p>Inspire-se, explore e descubra novos horizontes.</p><a class="instagram-button" href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer">◎ &nbsp; Siga a André Aéreas <span>↗</span></a></div></div>
+    <div class="footer-columns"><div><span class="footer-label">EXPLORE</span><a href="#destinos">Destinos</a><a href="#ofertas">Inspiração e ofertas</a><a href="#experiencia">Experiência a bordo</a><a href="#reservar">Buscar voos</a><a href="conta.html">Minha conta</a></div><div><span class="footer-label">INFORMAÇÕES</span><a href="#sobre">Sobre a André Aéreas</a><a href="#contato">Atendimento</a><a href="#contato">Bagagem e documentos</a><a href="#contato">Perguntas frequentes</a></div><div id="contato"><span class="footer-label">FALE COM A GENTE</span><a href="https://wa.me/553591793515?text=Ol%C3%A1%21%20Gostaria%20de%20saber%20mais%20sobre%20as%20passagens%20e%20os%20servi%C3%A7os%20da%20Andr%C3%A9%20A%C3%A9reas." target="_blank" rel="noopener noreferrer">WhatsApp ↗</a><a href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer">Instagram ↗</a><a href="mailto:">E-mail: canal não configurado</a></div><div class="footer-social"><span class="footer-label">ACOMPANHE A JORNADA</span><p>Inspire-se, explore e descubra novos horizontes.</p><a class="instagram-button" href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer">◎ &nbsp; Siga a André Aéreas <span>↗</span></a></div></div>
     <div class="footer-bottom"><span>© 2026 ANDRÉ AÉREAS.</span><div><a href="#contato">Privacidade</a><a href="#contato">Termos de uso</a></div><a href="#inicio">VOLTAR AO TOPO ↑</a></div>
     <p class="legal-note">Consulte a disponibilidade cadastrada pela André Aéreas.</p>
   </footer>
@@ -241,10 +241,10 @@ const form = $("#flight-form");
 async function syncAccountHeader(){
   const cta=document.getElementById('account-cta'); if(!cta)return;
   try{const r=await fetch('/api/auth/me',{credentials:'same-origin'});const data=await r.json();
-    if(data.authenticated){cta.href='/conta';cta.innerHTML='<span aria-hidden="true" class="profile-silhouette"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="7.5" r="3.5"></circle><path d="M4.5 21c.5-4.4 3.2-6.7 7.5-6.7s7 2.3 7.5 6.7"></path></svg></span><span class="profile-label">Minha conta</span>';
+    if(data.authenticated){cta.href='conta.html';cta.innerHTML='<span aria-hidden="true" class="profile-silhouette"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="7.5" r="3.5"></circle><path d="M4.5 21c.5-4.4 3.2-6.7 7.5-6.7s7 2.3 7.5 6.7"></path></svg></span><span class="profile-label">Minha conta</span>';
       cta.setAttribute('aria-label','Abrir minha conta');cta.classList.add('is-profile');
-    } else {cta.href='/conta';cta.innerHTML='Planejar viagem <span>↗</span>';}
-  }catch{cta.href='/conta';}
+    } else {cta.href='conta.html';cta.innerHTML='Planejar viagem <span>↗</span>';}
+  }catch{cta.href='conta.html';}
 }
 syncAccountHeader();
 
@@ -361,7 +361,7 @@ async function searchFlights(){
 }
 form.addEventListener("submit", async event=>{
   event.preventDefault();
-  try{const auth=await fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>r.json());if(!auth.authenticated){location.href='/conta?next='+encodeURIComponent('/#reservar');return;}}catch{location.href='/conta?next='+encodeURIComponent('/#reservar');return;}
+  try{const auth=await fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>r.json());if(!auth.authenticated){location.href='conta.html?next='+encodeURIComponent('index.html#reservar');return;}}catch{location.href='conta.html?next='+encodeURIComponent('index.html#reservar');return;}
   const origin=$("#origin").value.trim(), destination=$("#destination").value.trim();
   if(!origin||!destination){message.textContent="Informe a origem e o destino para continuar.";return;}
   if(origin.toLowerCase()===destination.toLowerCase()){message.textContent="Origem e destino precisam ser diferentes.";showToast(message.textContent);return;}
