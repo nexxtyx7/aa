@@ -1,3 +1,9 @@
+IMPORTANTE PARA GITHUB PAGES
+----------------------------
+Esta correção usa caminhos relativos (por exemplo, conta.html) para evitar o 404 ao abrir a página de login quando o site está publicado dentro de um repositório GitHub Pages.
+
+ATENÇÃO: GitHub Pages hospeda somente arquivos estáticos. Ele NÃO executa server.js nem as rotas /api/auth, /api/flights e outras APIs. Portanto, cadastro, login, sessão, busca autenticada e recuperação de senha não funcionarão de verdade até que o backend Node.js seja publicado em uma hospedagem compatível (por exemplo, Render) e o frontend seja configurado para chamar a URL desse backend. Não insira senhas/chaves secretas no GitHub.
+
 # André Aéreas — site + sistema inicial de atendimento
 
 Este pacote continua o site visual existente e adiciona uma base de backend persistente. Não inclui dados de voos de exemplo e não inclui credenciais reais.
