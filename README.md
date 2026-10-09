@@ -45,3 +45,8 @@ O servidor lê variáveis de ambiente do processo. Para carregar `.env` localmen
 - Verificação de sintaxe do script inline de `admin.html`.
 
 A instalação de dependências e um teste de integração real do servidor não foram concluídos neste ambiente; portanto, cadastro/login/API/banco não devem ser considerados testados de ponta a ponta até rodar `npm install` e seguir os testes manuais em ambiente local.
+
+
+## Atualização desta versão
+- O cabeçalho da página inicial agora mostra o link **Entrar / Criar conta**, que abre `/conta.html`.
+- O link é responsivo para celular. Para que login/cadastro funcionem, o servidor Node.js descrito neste README precisa estar hospedado e executando; apenas publicar os arquivos estáticos no GitHub Pages não executa `server.js` nem as APIs `/api`.
