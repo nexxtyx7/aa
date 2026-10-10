@@ -102,7 +102,7 @@ const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'')) && String(e
 app.use(helmet({contentSecurityPolicy:false}));
 app.use(express.json());
 app.use(morgan('tiny'));
-app.use(express.static(path.join(__dirname,'public')));
+app.use(express.static(__dirname));
 
 app.post('/api/admin/login',(req,res)=>{if(!ADMIN_PASSWORD || String(req.body.password||'')!==ADMIN_PASSWORD)return res.status(401).json({error:'Senha inválida. Configure ADMIN_PASSWORD no ambiente.'});res.setHeader('Set-Cookie',`aa_admin=${cookieToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`);res.json({ok:true});});
 app.post('/api/admin/logout',(req,res)=>{res.setHeader('Set-Cookie','aa_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');res.json({ok:true});});
@@ -258,8 +258,12 @@ app.get('/api/admin/users',requireAdmin,(req,res)=>res.json(db.prepare("SELECT u
 app.post('/api/admin/miles/adjust',(req,res)=>{if(!isAdmin(req))return res.status(401).json({error:'Não autorizado'});const b=req.body,userId=Number(b.user_id),delta=Number(b.delta),reason=String(b.reason||'').trim();if(!Number.isInteger(delta)||delta===0||!reason||reason.length>500)return res.status(400).json({error:'Informe quantidade inteira diferente de zero e motivo.'});const balance=db.prepare('SELECT COALESCE(SUM(delta),0) n FROM mile_ledger WHERE user_id=?').get(userId)?.n;if(balance===undefined)return res.status(404).json({error:'Cliente não encontrado.'});if(balance+delta<0)return res.status(400).json({error:'O ajuste não pode deixar o saldo negativo.'});db.prepare('INSERT INTO mile_ledger(user_id,delta,kind,reason,admin_id,rule_snapshot) VALUES(?,?,?,?,?,?)').run(userId,delta,'manual_adjustment',reason,'admin',JSON.stringify({manual:true}));audit('admin','miles_adjustment','user',userId,{delta,reason});res.json({ok:true,balance:balance+delta});});
 app.get('/api/admin/audit',requireAdmin,(req,res)=>res.json(db.prepare('SELECT * FROM admin_audit ORDER BY id DESC LIMIT 300').all()));
 
-app.get('/admin',(req,res)=>res.sendFile(path.join(__dirname,'public','admin.html')));
-app.get('/conta',(req,res)=>res.sendFile(path.join(__dirname,'public','conta.html')));
-app.get('/privacidade',(req,res)=>res.sendFile(path.join(__dirname,'public','privacidade.html')));
-app.use((req,res,next)=>{if(req.path.startsWith('/api/')) return next(); res.sendFile(path.join(__dirname,'public','index.html'));});
+app.get('/admin',(req,res)=>res.sendFile(path.join(__dirname,'admin.html')));
+app.get('/conta',(req,res)=>res.sendFile(path.join(__dirname,'conta.html')));
+app.get('/privacidade',(req,res)=>res.sendFile(path.join(__dirname,'privacidade.html')));
+
+app.use((req,res,next)=>{
+  if(req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(__dirname,'index.html'));
+});
 app.listen(PORT,()=>console.log(`André Aéreas online em http://localhost:${PORT}`));
