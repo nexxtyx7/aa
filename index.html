@@ -237,16 +237,15 @@ const CONTACTS = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const form = $("#flight-form");
-// Acesso da conta no cabeçalho: silhueta para clientes autenticados.
-async function syncAccountHeader(){
+// Modo de demonstração: cabeçalho sincronizado com a sessão local do navegador.
+function syncAccountHeader(){
   const cta=document.getElementById('account-cta'); if(!cta)return;
-  try{const r=await fetch('/api/auth/me',{credentials:'same-origin'});const data=await r.json();
-    if(data.authenticated){cta.href='conta.html';cta.innerHTML='<span aria-hidden="true" class="profile-silhouette"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="7.5" r="3.5"></circle><path d="M4.5 21c.5-4.4 3.2-6.7 7.5-6.7s7 2.3 7.5 6.7"></path></svg></span><span class="profile-label">Minha conta</span>';
-      cta.setAttribute('aria-label','Abrir minha conta');cta.classList.add('is-profile');
-    } else {cta.href='conta.html';cta.innerHTML='Planejar viagem <span>↗</span>';}
-  }catch{cta.href='conta.html';}
+  let user=null;try{user=JSON.parse(localStorage.getItem('aa_demo_session_v1')||'null')}catch{}
+  cta.href='conta.html';
+  if(user){cta.innerHTML='<span aria-hidden="true" class="profile-silhouette"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="7.5" r="3.5"></circle><path d="M4.5 21c.5-4.4 3.2-6.7 7.5-6.7s7 2.3 7.5 6.7"></path></svg></span><span class="profile-label">Minha conta</span>';cta.setAttribute('aria-label','Abrir minha conta');cta.classList.add('is-profile');}
+  else{cta.innerHTML='Planejar viagem <span>↗</span>';cta.setAttribute('aria-label','Planejar viagem');cta.classList.remove('is-profile');}
 }
-syncAccountHeader();
+syncAccountHeader();window.addEventListener('storage',syncAccountHeader);
 
 // Os cards de campeonato levam apenas à escolha da rota; não definem destino automaticamente.
 $$('.jiu-grid .jiu-card').forEach(card => {
@@ -361,7 +360,7 @@ async function searchFlights(){
 }
 form.addEventListener("submit", async event=>{
   event.preventDefault();
-  try{const auth=await fetch('/api/auth/me',{credentials:'same-origin'}).then(r=>r.json());if(!auth.authenticated){location.href='conta.html?next='+encodeURIComponent('index.html#reservar');return;}}catch{location.href='conta.html?next='+encodeURIComponent('index.html#reservar');return;}
+  let demoSession=null;try{demoSession=JSON.parse(localStorage.getItem('aa_demo_session_v1')||'null')}catch{}if(!demoSession){location.href='conta.html?next='+encodeURIComponent('index.html#reservar');return;}
   const origin=$("#origin").value.trim(), destination=$("#destination").value.trim();
   if(!origin||!destination){message.textContent="Informe a origem e o destino para continuar.";return;}
   if(origin.toLowerCase()===destination.toLowerCase()){message.textContent="Origem e destino precisam ser diferentes.";showToast(message.textContent);return;}
