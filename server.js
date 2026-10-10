@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,7 +14,9 @@ const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 if (process.env.NODE_ENV === 'production' && (!ADMIN_PASSWORD || !process.env.SESSION_SECRET)) { throw new Error('Defina ADMIN_PASSWORD e SESSION_SECRET no ambiente de produção.'); }
-const db = new Database(path.join(__dirname,'data','andre-aereas.db'));
+const dataDir = path.join(__dirname, 'data');
+fs.mkdirSync(dataDir, { recursive: true });
+const db = new Database(path.join(dataDir, 'andre-aereas.db'));
 
 db.pragma('journal_mode = WAL');
 db.exec(`CREATE TABLE IF NOT EXISTS locations (
