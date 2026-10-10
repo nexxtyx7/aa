@@ -1,8 +1,13 @@
+
 {
   "name": "andre-aereas-system",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+
   "scripts": {
     "start": "node server.js",
     "dev": "node --env-file=.env --watch server.js"
