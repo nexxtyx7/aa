@@ -254,16 +254,24 @@ function syncAccountHeader(){
 }
 syncAccountHeader();window.addEventListener('storage',syncAccountHeader);
 
-// Os cards de campeonato apenas levam à área de busca de voos.
-// Não alteram a origem nem o destino selecionados pelo usuário.
+// Os cards de Jiu-Jitsu apenas levam à área de busca.
+// Capturamos o clique antes de outros handlers para impedir que algum código
+// antigo use atributos ausentes (ex.: destination='undefined') ou altere os campos.
 $$('.jiu-grid .jiu-card').forEach(card => {
+  card.removeAttribute('onclick');
+  card.querySelectorAll('[onclick]').forEach(el => el.removeAttribute('onclick'));
   card.addEventListener('click', event => {
     event.preventDefault();
-    document.getElementById('reservar')?.scrollIntoView({
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'start'
-    });
-  });
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    const bookingSection = document.getElementById('reservar');
+    if (bookingSection) {
+      bookingSection.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start'
+      });
+    }
+  }, true);
 });
 const modal = $("#results-modal");
 const message = $("#form-message");
