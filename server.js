@@ -5,8 +5,9 @@ import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { searchProviderFlights, flightProviderStatus, getProviderOffer, FlightProviderError } from './services/flightProviders/index.js';
 import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -14,9 +15,9 @@ const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 if (process.env.NODE_ENV === 'production' && (!ADMIN_PASSWORD || !process.env.SESSION_SECRET)) { throw new Error('Defina ADMIN_PASSWORD e SESSION_SECRET no ambiente de produção.'); }
-const dataDir = path.join(__dirname, 'data');
-fs.mkdirSync(dataDir, { recursive: true });
-const db = new Database(path.join(dataDir, 'andre-aereas.db'));
+const DATABASE_PATH = process.env.DATABASE_PATH || path.join(__dirname,'data','andre-aereas.db');
+mkdirSync(path.dirname(path.resolve(DATABASE_PATH)), { recursive: true });
+const db = new Database(DATABASE_PATH);
 
 db.pragma('journal_mode = WAL');
 db.exec(`CREATE TABLE IF NOT EXISTS locations (
@@ -101,19 +102,99 @@ const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'')) && String(e
 app.use(helmet({contentSecurityPolicy:false}));
 app.use(express.json());
 app.use(morgan('tiny'));
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname,'public')));
 
 app.post('/api/admin/login',(req,res)=>{if(!ADMIN_PASSWORD || String(req.body.password||'')!==ADMIN_PASSWORD)return res.status(401).json({error:'Senha inválida. Configure ADMIN_PASSWORD no ambiente.'});res.setHeader('Set-Cookie',`aa_admin=${cookieToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`);res.json({ok:true});});
 app.post('/api/admin/logout',(req,res)=>{res.setHeader('Set-Cookie','aa_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');res.json({ok:true});});
 app.get('/api/admin/me',(req,res)=>res.json({authenticated:isAdmin(req)}));
+app.get('/api/flight-provider-status',(req,res)=>res.json(flightProviderStatus()));
 
-app.get('/api/locations',(req,res)=>{const q=String(req.query.q||'').trim().toLowerCase();let rows=db.prepare('SELECT * FROM locations WHERE active=1 ORDER BY city, airport').all();if(q)rows=rows.filter(x=>`${x.city} ${x.airport} ${x.code} ${x.region} ${x.country}`.toLowerCase().includes(q));res.json(rows.map(cleanLocation));});
+const DEFAULT_AIRPORTS = [
+  ['São Paulo','Aeroporto Internacional de São Paulo/Guarulhos','GRU','Brasil'],
+  ['São Paulo','Aeroporto de Congonhas','CGH','Brasil'],
+  ['Campinas','Aeroporto Internacional de Viracopos','VCP','Brasil'],
+  ['Rio de Janeiro','Aeroporto Internacional do Galeão','GIG','Brasil'],
+  ['Rio de Janeiro','Aeroporto Santos Dumont','SDU','Brasil'],
+  ['Belo Horizonte','Aeroporto Internacional de Confins','CNF','Brasil'],
+  ['Brasília','Aeroporto Internacional de Brasília','BSB','Brasil'],
+  ['Porto Alegre','Aeroporto Salgado Filho','POA','Brasil'],
+  ['Curitiba','Aeroporto Afonso Pena','CWB','Brasil'],
+  ['Florianópolis','Aeroporto Internacional de Florianópolis','FLN','Brasil'],
+  ['Salvador','Aeroporto Internacional de Salvador','SSA','Brasil'],
+  ['Recife','Aeroporto Internacional do Recife','REC','Brasil'],
+  ['Fortaleza','Aeroporto Internacional de Fortaleza','FOR','Brasil'],
+  ['Natal','Aeroporto Internacional de Natal','NAT','Brasil'],
+  ['João Pessoa','Aeroporto Internacional de João Pessoa','JPA','Brasil'],
+  ['Maceió','Aeroporto Internacional de Maceió','MCZ','Brasil'],
+  ['Aracaju','Aeroporto de Aracaju','AJU','Brasil'],
+  ['Teresina','Aeroporto de Teresina','THE','Brasil'],
+  ['São Luís','Aeroporto de São Luís','SLZ','Brasil'],
+  ['Belém','Aeroporto Internacional de Belém','BEL','Brasil'],
+  ['Manaus','Aeroporto Internacional de Manaus','MAO','Brasil'],
+  ['Porto Velho','Aeroporto de Porto Velho','PVH','Brasil'],
+  ['Rio Branco','Aeroporto de Rio Branco','RBR','Brasil'],
+  ['Macapá','Aeroporto Internacional de Macapá','MCP','Brasil'],
+  ['Boa Vista','Aeroporto Internacional de Boa Vista','BVB','Brasil'],
+  ['Campo Grande','Aeroporto Internacional de Campo Grande','CGR','Brasil'],
+  ['Cuiabá','Aeroporto Internacional de Cuiabá','CGB','Brasil'],
+  ['Goiânia','Aeroporto de Goiânia','GYN','Brasil'],
+  ['Foz do Iguaçu','Aeroporto Internacional de Foz do Iguaçu','IGU','Brasil'],
+  ['Londrina','Aeroporto de Londrina','LDB','Brasil'],
+  ['Uberlândia','Aeroporto de Uberlândia','UDI','Brasil'],
+  ['Orlando','Orlando International Airport','MCO','Estados Unidos'],
+  ['Miami','Miami International Airport','MIA','Estados Unidos'],
+  ['Nova York','John F. Kennedy International Airport','JFK','Estados Unidos'],
+  ['Lisboa','Aeroporto Humberto Delgado','LIS','Portugal'],
+  ['Paris','Aeroporto Charles de Gaulle','CDG','França'],
+  ['Londres','Heathrow Airport','LHR','Reino Unido'],
+  ['Madri','Adolfo Suárez Madrid–Barajas Airport','MAD','Espanha'],
+  ['Roma','Leonardo da Vinci–Fiumicino Airport','FCO','Itália'],
+  ['Buenos Aires','Ministro Pistarini International Airport','EZE','Argentina'],
+  ['Santiago','Arturo Merino Benítez International Airport','SCL','Chile']
+].map(([city,airport,code,country],index)=>({id:`default-${code}`,city,airport,code,country,region:'',latitude:null,longitude:null,active:true,default_entry:true,sort_order:index}));
+app.get('/api/locations',(req,res)=>{
+  const q=String(req.query.q||'').trim().toLowerCase();
+  const custom=db.prepare('SELECT * FROM locations WHERE active=1 ORDER BY city, airport').all().map(row=>({...cleanLocation(row),default_entry:false}));
+  const customCodes=new Set(custom.map(row=>String(row.code).toUpperCase()));
+  let rows=[...custom,...DEFAULT_AIRPORTS.filter(row=>!customCodes.has(row.code))];
+  rows.sort((a,b)=>a.city.localeCompare(b.city,'pt-BR')||a.airport.localeCompare(b.airport,'pt-BR'));
+  if(q) rows=rows.filter(x=>`${x.city} ${x.airport} ${x.code} ${x.region||''} ${x.country||''}`.toLowerCase().includes(q));
+  res.json(rows);
+});
 app.get('/api/admin/locations',requireAdmin,(req,res)=>res.json(db.prepare('SELECT * FROM locations ORDER BY active DESC, city, airport').all().map(cleanLocation)));
 app.post('/api/admin/locations',requireAdmin,(req,res)=>{const b=req.body;try{const info=db.prepare(`INSERT INTO locations(city,region,country,airport,code,latitude,longitude,active) VALUES(?,?,?,?,?,?,?,?)`).run(String(b.city||'').trim(),String(b.region||'').trim(),String(b.country||'').trim(),String(b.airport||'').trim(),String(b.code||'').trim().toUpperCase(),b.latitude===''?null:Number(b.latitude),b.longitude===''?null:Number(b.longitude),b.active===false?0:1);res.status(201).json(cleanLocation(db.prepare('SELECT * FROM locations WHERE id=?').get(info.lastInsertRowid)));}catch(e){res.status(400).json({error:e.message.includes('UNIQUE')?'Código IATA já cadastrado':e.message});}});
 app.put('/api/admin/locations/:id',requireAdmin,(req,res)=>{const b=req.body;try{db.prepare(`UPDATE locations SET city=?,region=?,country=?,airport=?,code=?,latitude=?,longitude=?,active=? WHERE id=?`).run(String(b.city||'').trim(),String(b.region||'').trim(),String(b.country||'').trim(),String(b.airport||'').trim(),String(b.code||'').trim().toUpperCase(),b.latitude===''?null:Number(b.latitude),b.longitude===''?null:Number(b.longitude),b.active===false?0:1,Number(req.params.id));const row=db.prepare('SELECT * FROM locations WHERE id=?').get(req.params.id);res.json(cleanLocation(row));}catch(e){res.status(400).json({error:e.message.includes('UNIQUE')?'Código IATA já cadastrado':e.message});}});
 app.delete('/api/admin/locations/:id',requireAdmin,(req,res)=>{const used=db.prepare('SELECT COUNT(*) c FROM flights WHERE origin_id=? OR destination_id=?').get(req.params.id,req.params.id).c;if(used)return res.status(409).json({error:'Este local já está ligado a voos. Desative-o em vez de apagar.'});db.prepare('DELETE FROM locations WHERE id=?').run(req.params.id);res.json({ok:true});});
 
-app.get('/api/flights',(req,res)=>{const {origin,destination,date,tripType='round'}=req.query;let sql=`SELECT f.*,o.city origin_city,o.airport origin_airport,o.code origin_code,d.city destination_city,d.airport destination_airport,d.code destination_code FROM flights f JOIN locations o ON o.id=f.origin_id JOIN locations d ON d.id=f.destination_id WHERE f.active=1 AND f.seats>0 AND o.active=1 AND d.active=1`;const args=[];if(origin){sql+=' AND o.code=?';args.push(String(origin).toUpperCase());}if(destination){sql+=' AND d.code=?';args.push(String(destination).toUpperCase());}if(date){sql+=' AND f.departure_date=?';args.push(date);}if(tripType==='oneway')sql+=" AND f.trip_type='oneway'";sql+=' ORDER BY f.price ASC, f.departure_time ASC';res.json(db.prepare(sql).all(...args).map(cleanFlight));});
+app.get('/api/flights', async (req,res)=>{
+  const origin=String(req.query.origin||'').trim().toUpperCase();
+  const destination=String(req.query.destination||'').trim().toUpperCase();
+  const departureDate=String(req.query.date||'').trim();
+  const returnDate=String(req.query.returnDate||'').trim();
+  const tripType=String(req.query.tripType||'round');
+  const passengers=Number(req.query.passengers||1);
+  const cabin=String(req.query.cabin||'economy').toLowerCase();
+  const validDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`))&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
+  if(!/^[A-Z]{3}$/.test(origin)||!/^[A-Z]{3}$/.test(destination)||origin===destination) return res.status(400).json({error:'Informe códigos IATA válidos e diferentes para origem e destino.',results:[],provider:flightProviderStatus()});
+  if(!validDate(departureDate)||departureDate<new Date().toISOString().slice(0,10)) return res.status(400).json({error:'A data de ida é inválida ou já passou.',results:[],provider:flightProviderStatus()});
+  if(tripType!=='oneway'&&(!validDate(returnDate)||returnDate<departureDate)) return res.status(400).json({error:'Informe uma data de volta válida, igual ou posterior à ida.',results:[],provider:flightProviderStatus()});
+  if(!Number.isInteger(passengers)||passengers<1||passengers>9) return res.status(400).json({error:'A quantidade de passageiros deve ser entre 1 e 9.',results:[],provider:flightProviderStatus()});
+  try {
+    const provider=await searchProviderFlights({origin,destination,departureDate,returnDate:tripType==='oneway'?null:returnDate,passengers,cabin});
+    let sql=`SELECT f.*,o.city origin_city,o.airport origin_airport,o.code origin_code,d.city destination_city,d.airport destination_airport,d.code destination_code FROM flights f JOIN locations o ON o.id=f.origin_id JOIN locations d ON d.id=f.destination_id WHERE f.active=1 AND f.seats>=? AND o.active=1 AND d.active=1 AND o.code=? AND d.code=? AND f.departure_date=?`;
+    const args=[passengers,origin,destination,departureDate];
+    if(tripType==='oneway') sql+=" AND f.trip_type='oneway'";
+    else { sql+=" AND f.trip_type='round' AND f.return_date=?"; args.push(returnDate); }
+    sql+=' ORDER BY f.price ASC, f.departure_time ASC';
+    const manual=db.prepare(sql).all(...args).map(row=>({...cleanFlight(row),source_type:'manual',source:'Cadastro administrativo',currency:'BRL',provider_offer_id:null,return_info:null,outbound_segments:[]}));
+    const results=[...provider.offers,...manual].sort((a,b)=>Number(a.price)-Number(b.price));
+    res.json({results,provider:{provider:provider.provider,configured:provider.configured,status:provider.status,message:provider.message},total:results.length});
+  } catch(error) {
+    const status=error instanceof FlightProviderError?error.statusCode:502;
+    console.error('[flight-search]',error?.code||error?.name||'ERROR');
+    res.status(status).json({error:error instanceof FlightProviderError?error.message:'A fonte de voos está temporariamente indisponível. Tente novamente.',results:[],provider:flightProviderStatus()});
+  }
+});
 app.get('/api/admin/flights',requireAdmin,(req,res)=>{res.json(db.prepare(`SELECT f.*,o.city origin_city,o.code origin_code,d.city destination_city,d.code destination_code FROM flights f JOIN locations o ON o.id=f.origin_id JOIN locations d ON d.id=f.destination_id ORDER BY f.departure_date DESC,f.departure_time`).all().map(cleanFlight));});
 app.post('/api/admin/flights',requireAdmin,(req,res)=>{const b=req.body;try{const info=db.prepare(`INSERT INTO flights(origin_id,destination_id,flight_code,airline_name,departure_date,return_date,departure_time,arrival_time,duration_minutes,stops,cabin,price,seats,trip_type,active) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(Number(b.origin_id),Number(b.destination_id),String(b.flight_code||'').trim(),String(b.airline_name||'André Aéreas').trim(),b.departure_date,b.return_date||null,b.departure_time,b.arrival_time,Number(b.duration_minutes||0),Number(b.stops||0),String(b.cabin||'Econômica'),Number(b.price||0),Number(b.seats||0),String(b.trip_type||'round'),b.active===false?0:1);res.status(201).json({id:info.lastInsertRowid});}catch(e){res.status(400).json({error:e.message});}});
 app.put('/api/admin/flights/:id',requireAdmin,(req,res)=>{const b=req.body;try{db.prepare(`UPDATE flights SET origin_id=?,destination_id=?,flight_code=?,airline_name=?,departure_date=?,return_date=?,departure_time=?,arrival_time=?,duration_minutes=?,stops=?,cabin=?,price=?,seats=?,trip_type=?,active=? WHERE id=?`).run(Number(b.origin_id),Number(b.destination_id),String(b.flight_code||'').trim(),String(b.airline_name||'André Aéreas').trim(),b.departure_date,b.return_date||null,b.departure_time,b.arrival_time,Number(b.duration_minutes||0),Number(b.stops||0),String(b.cabin||'Econômica'),Number(b.price||0),Number(b.seats||0),String(b.trip_type||'round'),b.active===false?0:1,Number(req.params.id));res.json({ok:true});}catch(e){res.status(400).json({error:e.message});}});
@@ -130,7 +211,40 @@ app.post('/api/auth/forgot-password',async(req,res)=>{const email=String(req.bod
 
 Se você não solicitou a recuperação, ignore este e-mail.`,html:`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#10263e"><h2>André Aéreas</h2><p>Olá, ${String(u.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}.</p><p>Recebemos uma solicitação para redefinir a senha da sua conta.</p><p><a href="${link}" style="display:inline-block;padding:13px 20px;background:#0d4c87;color:white;text-decoration:none;border-radius:8px">Criar nova senha</a></p><p>O link expira em 30 minutos. Se você não pediu essa alteração, ignore este e-mail.</p></div>`});return res.json(generic);}catch(err){console.error('Falha no envio de recuperação:',err.message);return res.status(503).json({error:'Não foi possível enviar o e-mail agora. Tente novamente mais tarde.'});}}if(process.env.NODE_ENV!=='production'&&process.env.EXPOSE_DEV_RESET_TOKEN==='true')return res.json({...generic,devToken:token});return res.json(generic);});
 app.post('/api/auth/reset-password',(req,res)=>{const token=String(req.body.token||''),password=String(req.body.password||'');if(password.length<10)return res.status(400).json({error:'A nova senha deve ter pelo menos 10 caracteres.'});const r=db.prepare('SELECT * FROM password_resets WHERE token_hash=? AND used=0 AND expires_at>?').get(digest(token),Date.now());if(!r)return res.status(400).json({error:'Token inválido ou expirado.'});const h=hashPassword(password);const tx=db.transaction(()=>{db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(`${h.salt}:${h.hash}`,r.user_id);db.prepare('UPDATE password_resets SET used=1 WHERE token_hash=?').run(digest(token));db.prepare('DELETE FROM user_sessions WHERE user_id=?').run(r.user_id);});tx();res.json({ok:true});});
-app.post('/api/quotes', requireUser, (req,res)=>{const u=req.user,b=req.body;const origin=String(b.origin||'').trim().slice(0,120),destination=String(b.destination||'').trim().slice(0,120),date=String(b.departure_date||''),ret=String(b.return_date||'')||null,passengers=Number(b.passengers);if(!origin||!destination||origin===destination||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!Number.isInteger(passengers)||passengers<1||passengers>9)return res.status(400).json({error:'Confira origem, destino, data e quantidade de passageiros.'});let flight=null;if(b.flight_id){flight=db.prepare(`SELECT f.*,o.city origin_city,o.code origin_code,d.city destination_city,d.code destination_code FROM flights f JOIN locations o ON o.id=f.origin_id JOIN locations d ON d.id=f.destination_id WHERE f.id=? AND f.active=1 AND f.seats>=? AND f.departure_date=? AND o.active=1 AND d.active=1`).get(Number(b.flight_id),passengers,date);if(!flight)return res.status(400).json({error:'O voo selecionado não está mais disponível. Solicite uma cotação sem selecionar voo.'});}const info=db.prepare('INSERT INTO quotes(user_id,origin,destination,departure_date,return_date,passengers,selected_flight_id,flight_snapshot,quoted_price) VALUES(?,?,?,?,?,?,?,?,?)').run(u?.id||null,origin,destination,date,ret,passengers,flight?.id||null,flight?JSON.stringify({flight_code:flight.flight_code,airline_name:flight.airline_name,departure_time:flight.departure_time,arrival_time:flight.arrival_time,origin_code:flight.origin_code,destination_code:flight.destination_code,cabin:flight.cabin,price:flight.price}):null,flight?.price??null);const msg=`Olá! Quero cotar uma passagem pela André Aéreas.\nOrigem: ${origin}\nDestino: ${destination}\nIda: ${date}\nVolta: ${ret||'Não informada'}\nPassageiros: ${passengers}${flight?`\nVoo: ${flight.flight_code} — ${flight.airline_name}\nHorário: ${flight.departure_time}–${flight.arrival_time}\nPreço informado: R$ ${Number(flight.price).toFixed(2).replace('.',',')} (sujeito a confirmação)`:'\nNão selecionei um voo; preciso de opções e valores atualizados.'}\nSolicitação nº ${info.lastInsertRowid}`;res.status(201).json({id:info.lastInsertRowid,status:'pending',whatsapp_url:'https://wa.me/553591793515?text='+encodeURIComponent(msg)});});
+app.post('/api/quotes', requireUser, async (req,res)=>{
+  const u=req.user,b=req.body||{};
+  const origin=String(b.origin||'').trim().slice(0,120),destination=String(b.destination||'').trim().slice(0,120);
+  const date=String(b.departure_date||''),ret=String(b.return_date||'')||null,passengers=Number(b.passengers);
+  const validIsoDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`))&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
+  if(!origin||!destination||origin===destination||!validIsoDate(date)||date<new Date().toISOString().slice(0,10)||!Number.isInteger(passengers)||passengers<1||passengers>9) return res.status(400).json({error:'Confira origem, destino, data e quantidade de passageiros.'});
+  if(ret&&(!validIsoDate(ret)||ret<date)) return res.status(400).json({error:'A data de volta deve ser válida e igual ou posterior à ida.'});
+  let flight=null,providerFlight=null,flightId=null;
+  if(b.provider_offer_id){
+    try {
+      providerFlight=await getProviderOffer(b.provider_offer_id);
+      const requestedOrigin=(origin.match(/\(([A-Z]{3})\)/)||[])[1]||origin.toUpperCase();
+      const requestedDestination=(destination.match(/\(([A-Z]{3})\)/)||[])[1]||destination.toUpperCase();
+      if(providerFlight.origin_code!==requestedOrigin||providerFlight.destination_code!==requestedDestination||providerFlight.departure_date!==date) return res.status(409).json({error:'A oferta não corresponde mais à rota ou à data escolhida. Faça uma nova pesquisa.'});
+      if(ret&&providerFlight.return_date!==ret) return res.status(409).json({error:'A data de volta da oferta mudou ou não corresponde à pesquisa. Faça uma nova pesquisa.'});
+      if(providerFlight.passenger_count!==null&&providerFlight.passenger_count!==passengers) return res.status(409).json({error:'A quantidade de passageiros da oferta não corresponde à pesquisa. Faça uma nova pesquisa.'});
+    } catch(error) {
+      const status=error instanceof FlightProviderError?error.statusCode:502;
+      return res.status(status).json({error:error instanceof FlightProviderError?error.message:'Não foi possível validar a oferta atual. Faça uma nova pesquisa.'});
+    }
+  } else if(b.flight_id){
+    flight=db.prepare(`SELECT f.*,o.city origin_city,o.code origin_code,d.city destination_city,d.code destination_code FROM flights f JOIN locations o ON o.id=f.origin_id JOIN locations d ON d.id=f.destination_id WHERE f.id=? AND f.active=1 AND f.seats>=? AND f.departure_date=? AND o.active=1 AND d.active=1`).get(Number(b.flight_id),passengers,date);
+    if(!flight)return res.status(400).json({error:'O voo cadastrado não está mais disponível. Faça uma nova pesquisa ou solicite cotação sem selecionar voo.'});
+    flightId=flight.id;
+  }
+  const snapshot=providerFlight?JSON.stringify({source:providerFlight.source,provider_offer_id:providerFlight.provider_offer_id,airline_name:providerFlight.airline_name,flight_code:providerFlight.flight_code,departure_time:providerFlight.departure_time,arrival_time:providerFlight.arrival_time,origin_code:providerFlight.origin_code,destination_code:providerFlight.destination_code,return_info:providerFlight.return_info,outbound_segments:providerFlight.outbound_segments,return_segments:providerFlight.return_segments,currency:providerFlight.currency,price:providerFlight.price,expires_at:providerFlight.expires_at}):flight?JSON.stringify({source:'Cadastro administrativo',flight_code:flight.flight_code,airline_name:flight.airline_name,departure_time:flight.departure_time,arrival_time:flight.arrival_time,origin_code:flight.origin_code,destination_code:flight.destination_code,cabin:flight.cabin,price:flight.price,currency:'BRL'}):null;
+  const price=providerFlight?.price??flight?.price??null;
+  const info=db.prepare('INSERT INTO quotes(user_id,origin,destination,departure_date,return_date,passengers,selected_flight_id,flight_snapshot,quoted_price) VALUES(?,?,?,?,?,?,?,?,?)').run(u?.id||null,origin,destination,date,ret,passengers,flightId,snapshot,price);
+  const priceText=providerFlight?`\nPreço retornado pela fonte: ${providerFlight.currency} ${Number(providerFlight.price).toFixed(2)} (total informado para a oferta; sujeito a nova confirmação)`:flight?`\nPreço cadastrado: R$ ${Number(flight.price).toFixed(2).replace('.',',')} (sujeito a confirmação)`:'';
+  const flightText=providerFlight?`\nCompanhia: ${providerFlight.airline_name}\nVoo: ${providerFlight.flight_code}\nHorário de ida: ${providerFlight.departure_time}–${providerFlight.arrival_time}\nFonte: ${providerFlight.source}`:flight?`\nVoo: ${flight.flight_code} — ${flight.airline_name}\nHorário: ${flight.departure_time}–${flight.arrival_time}`:'\nNão selecionei um voo; preciso de opções e valores atualizados.';
+  const msg=`Olá! Quero cotar uma passagem pela André Aéreas.\nOrigem: ${origin}\nDestino: ${destination}\nIda: ${date}\nVolta: ${ret||'Não informada'}\nPassageiros: ${passengers}${flightText}${priceText}\nSolicitação nº ${info.lastInsertRowid}`;
+  const phone=String(process.env.WHATSAPP_PHONE||'553591793515').replace(/\D/g,'');
+  res.status(201).json({id:info.lastInsertRowid,status:'pending',whatsapp_url:`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`});
+});
 app.get('/api/me/quotes',requireUser,(req,res)=>res.json(db.prepare('SELECT id,origin,destination,departure_date,return_date,passengers,quoted_price,status,created_at,updated_at FROM quotes WHERE user_id=? ORDER BY id DESC').all(req.user.id)));
 app.get('/api/me/purchases',requireUser,(req,res)=>res.json(db.prepare('SELECT p.id,p.amount,p.status,p.confirmed_at,q.origin,q.destination,q.departure_date FROM purchases p JOIN quotes q ON q.id=p.quote_id WHERE p.user_id=? ORDER BY p.id DESC').all(req.user.id)));
 app.get('/api/me/miles',requireUser,(req,res)=>{const balance=db.prepare('SELECT COALESCE(SUM(delta),0) n FROM mile_ledger WHERE user_id=?').get(req.user.id).n;res.json({balance,ledger:db.prepare('SELECT id,delta,kind,reason,created_at FROM mile_ledger WHERE user_id=? ORDER BY id DESC').all(req.user.id)});});
@@ -144,26 +258,8 @@ app.get('/api/admin/users',requireAdmin,(req,res)=>res.json(db.prepare("SELECT u
 app.post('/api/admin/miles/adjust',(req,res)=>{if(!isAdmin(req))return res.status(401).json({error:'Não autorizado'});const b=req.body,userId=Number(b.user_id),delta=Number(b.delta),reason=String(b.reason||'').trim();if(!Number.isInteger(delta)||delta===0||!reason||reason.length>500)return res.status(400).json({error:'Informe quantidade inteira diferente de zero e motivo.'});const balance=db.prepare('SELECT COALESCE(SUM(delta),0) n FROM mile_ledger WHERE user_id=?').get(userId)?.n;if(balance===undefined)return res.status(404).json({error:'Cliente não encontrado.'});if(balance+delta<0)return res.status(400).json({error:'O ajuste não pode deixar o saldo negativo.'});db.prepare('INSERT INTO mile_ledger(user_id,delta,kind,reason,admin_id,rule_snapshot) VALUES(?,?,?,?,?,?)').run(userId,delta,'manual_adjustment',reason,'admin',JSON.stringify({manual:true}));audit('admin','miles_adjustment','user',userId,{delta,reason});res.json({ok:true,balance:balance+delta});});
 app.get('/api/admin/audit',requireAdmin,(req,res)=>res.json(db.prepare('SELECT * FROM admin_audit ORDER BY id DESC LIMIT 300').all()));
 
-app.get('/', (req, res) =>
-  res.sendFile(path.join(__dirname, 'index.html'))
-);
-
-app.get('/admin', (req, res) =>
-  res.sendFile(path.join(__dirname, 'admin.html'))
-);
-
-app.get('/conta', (req, res) =>
-  res.sendFile(path.join(__dirname, 'conta.html'))
-);
-
-app.get('/privacidade', (req, res) =>
-  res.sendFile(path.join(__dirname, 'privacidade.html'))
-);
-
-app.use((req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'Rota não encontrada' });
-  }
-  res.status(404).send('Página não encontrada');
-});
+app.get('/admin',(req,res)=>res.sendFile(path.join(__dirname,'public','admin.html')));
+app.get('/conta',(req,res)=>res.sendFile(path.join(__dirname,'public','conta.html')));
+app.get('/privacidade',(req,res)=>res.sendFile(path.join(__dirname,'public','privacidade.html')));
+app.use((req,res,next)=>{if(req.path.startsWith('/api/')) return next(); res.sendFile(path.join(__dirname,'public','index.html'));});
 app.listen(PORT,()=>console.log(`André Aéreas online em http://localhost:${PORT}`));

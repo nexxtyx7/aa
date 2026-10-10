@@ -1,53 +1,100 @@
-IMPORTANTE PARA GITHUB PAGES
-----------------------------
-Esta correção usa caminhos relativos (por exemplo, conta.html) para evitar o 404 ao abrir a página de login quando o site está publicado dentro de um repositório GitHub Pages.
+# André Aéreas — site + painel + busca automática de voos
 
-ATENÇÃO: GitHub Pages hospeda somente arquivos estáticos. Ele NÃO executa server.js nem as rotas /api/auth, /api/flights e outras APIs. Portanto, cadastro, login, sessão, busca autenticada e recuperação de senha não funcionarão de verdade até que o backend Node.js seja publicado em uma hospedagem compatível (por exemplo, Render) e o frontend seja configurado para chamar a URL desse backend. Não insira senhas/chaves secretas no GitHub.
+Projeto Node.js 22 + Express + SQLite. O site público pesquisa ofertas automaticamente através de um adaptador de provedor; o painel administrativo continua disponível para clientes, cotações, compras, milhas e, opcionalmente, voos verificados cadastrados manualmente.
 
-# André Aéreas — site + sistema inicial de atendimento
+## Integração de voos e cobertura
 
-Este pacote continua o site visual existente e adiciona uma base de backend persistente. Não inclui dados de voos de exemplo e não inclui credenciais reais.
+O adaptador desta versão usa a **Duffel Flights API** em modo live. A Duffel publica cobertura para as três companhias solicitadas:
 
-## Tecnologias
-- Node.js 20+
-- Express 5, Helmet, Morgan
-- SQLite via `better-sqlite3` (arquivo persistente em `data/andre-aereas.db`)
-- Senhas de clientes com `scrypt`; tokens de sessão aleatórios armazenados no banco apenas como SHA-256
+- **LATAM:** aparece na lista de companhias com conexão direta.
+- **Azul:** listada através da Travelport.
+- **GOL:** listada através da Travelport.
 
-## Instalação local
-1. Instale Node.js 20 ou superior.
-2. Extraia o ZIP e abra a pasta no terminal.
-3. Execute `npm install`.
-4. Copie `.env.example` para `.env` e troque os valores por segredos fortes. Não publique `.env`.
-5. Execute `npm start`.
-6. Abra `http://localhost:3000`, a área do cliente em `/conta` e o painel em `/admin`.
+Isso indica que as companhias constam no catálogo público da Duffel, mas **não garante que toda rota, data, tarifa ou voo esteja disponível em cada pesquisa**. A cobertura efetiva também depende das permissões comerciais e do conteúdo liberado para a conta. A disponibilidade real depende da ativação da conta, do conteúdo autorizado para a conta e das respostas do fornecedor. O acesso live não deve ser considerado gratuito: podem existir critérios de aprovação, taxas ou condições comerciais. Não há garantia de uma API gratuita que forneça tarifas reais e completas das três companhias. O token de teste `duffel_test_...` serve apenas para desenvolvimento e não fornece preços reais; este projeto recusa esse token na busca pública para não exibir preços fictícios.
 
-O servidor lê variáveis de ambiente do processo. Para carregar `.env` localmente, use Node 20+ com `node --env-file=.env server.js` (ou ajuste o script `start` para `node --env-file=.env server.js`). Em hospedagem, configure as variáveis no painel do provedor. Não use os valores de exemplo em produção.
+Fontes oficiais consultadas:
+- Duffel — lista de companhias: https://duffel.com/flights/airlines
+- Duffel — LATAM: https://duffel.com/blog/latam-joins-duffel
+- Duffel — Azul: https://duffel.com/flights/airlines/azul
+- Duffel — GOL: https://duffel.com/flights/airlines/gol-intelligent-airlines
+- Duffel — modo de teste não tem preços reais: https://help.duffel.com/hc/en-gb/articles/4410085835282-Are-the-flight-prices-in-test-mode-sandbox-real
 
-## O que está implementado no código
-- Site público com busca conectada à API de voos cadastrados no banco; nenhum voo é pré-carregado como se fosse real.
-- Painel existente para cadastro manual de aeroportos e voos. Cadastre apenas dados verificados e mantenha disponibilidade/preço atualizados.
-- API de solicitação de cotação que registra a solicitação e devolve link `wa.me` preenchido; a solicitação pode ser anônima ou vinculada a uma sessão de cliente.
-- Cadastro de cliente, login/logout, senha com hash scrypt, sessão persistente no servidor e endpoint de recuperação de senha.
-- Área `/conta` com histórico de cotações, compras e extrato de milhas para clientes autenticados.
-- APIs administrativas para visão geral, status de cotações, registro único de compra por cotação, configuração do programa de milhas, ajuste manual justificado, lista de clientes e auditoria.
-- A compra confirmada só concede milhas se o programa estiver **ativo e aprovado**. A compra por cotação é única e o lançamento de milhas usa chave única para evitar duplicação.
-- Página inicial de privacidade em `/privacidade`; deve ser revisada pelo responsável jurídico/operacional antes de publicação.
+## Variáveis de ambiente
 
-## Estados de cotação
-`pending` (pendente), `in_progress` (em atendimento), `quote_sent` (cotação enviada), `purchase_confirmed` (compra confirmada), `cancelled` (cancelada).
+Configure-as no painel do Render em **Environment**. Não coloque tokens no HTML, no GitHub ou em qualquer arquivo público.
 
-## Integrações pendentes / limites conhecidos
-- **API de voos:** ainda não conectada. É necessário contratar/autorizar um fornecedor, obter credenciais e implementar seu adaptador. Até lá, resultados só aparecem se o administrador inserir dados verificados manualmente.
-- **Recuperação por e-mail:** o endpoint cria token de recuperação com expiração, mas o envio de e-mail não está ligado a SMTP/provedor transacional. Em desenvolvimento, o token só é retornado se `EXPOSE_DEV_RESET_TOKEN=true`; não habilite isso em produção.
-- **Pagamentos/parcelamento via Pix:** não há gateway de pagamento integrado; o responsável combina as condições fora do site. Não coletar dados de cartão.
-- **Milhas/resgates:** configurações e créditos por compra confirmada estão implementados. O fluxo completo de resgate/benefício ainda precisa de política aprovada e telas/API de solicitação e aprovação de resgates antes de oferecer resgates aos clientes. Valores iniciais do banco são provisórios e o programa começa desativado/não aprovado.
-- **LGPD:** a página é um modelo inicial, não uma avaliação jurídica. O responsável precisa completar identidade do controlador, canal dedicado, prazos, retenção, procedimento de exclusão/exportação e revisar bases legais/avisos.
-- **Produção:** publicar somente atrás de HTTPS, configurar `NODE_ENV=production`, `ADMIN_PASSWORD` forte e `SESSION_SECRET` forte; fazer backups protegidos do SQLite e testar restauração. Recomenda-se trocar o login administrativo legado por autenticação individual de funcionários antes de produção.
+### Obrigatórias para produção
 
-## Testes executados neste pacote
-- `node --check server.js`.
-- Verificação de sintaxe dos scripts inline de `index.html` e `conta.html`.
-- Verificação de sintaxe do script inline de `admin.html`.
+- `NODE_ENV=production` — ativa configurações de produção.
+- `ADMIN_PASSWORD` — senha forte do painel administrativo.
+- `SESSION_SECRET` — segredo aleatório longo usado para assinar sessões.
 
-A instalação de dependências e um teste de integração real do servidor não foram concluídos neste ambiente; portanto, cadastro/login/API/banco não devem ser considerados testados de ponta a ponta até rodar `npm install` e seguir os testes manuais em ambiente local.
+### Obrigatórias para busca automática real
+
+- `FLIGHT_PROVIDER=duffel`
+- `DUFFEL_ACCESS_TOKEN` — token **live** gerado após ativação/aprovação da conta Duffel. Não use `duffel_test_...` para exibir preços.
+
+### Opcionais para busca e atendimento
+
+- `DUFFEL_API_BASE_URL=https://api.duffel.com` — URL base da API.
+- `FLIGHT_CURRENCY=BRL` — moeda solicitada para as ofertas.
+- `FLIGHT_MAX_RESULTS=30` — limite de ofertas mostradas (máximo interno: 50).
+- `WHATSAPP_PHONE=553591793515` — número comercial em formato internacional, só dígitos, sem `+`.
+- `DATABASE_PATH=/var/data/andre-aereas.db` — caminho do banco SQLite. No Render, configure-o para um diretório de Persistent Disk montado; sem isso, o banco local pode ser perdido em um novo deploy/restart.
+
+### Opcionais para recuperação de senha por e-mail
+
+- `APP_BASE_URL=https://SEU-SERVICO.onrender.com`
+- `SMTP_HOST`
+- `SMTP_PORT=587`
+- `SMTP_SECURE=false` (use `true` se o provedor exigir TLS implícito)
+- `SMTP_USER`
+- `SMTP_PASS`
+- `MAIL_FROM`
+
+`PORT` é fornecida pelo Render automaticamente; localmente, o padrão é `3000`. `EXPOSE_DEV_RESET_TOKEN` deve permanecer `false` em produção.
+
+## Deploy no Render (Node.js 22)
+
+- Runtime: Node.
+- Node version: 22.x (o `package.json` também declara Node 22).
+- Build command: `npm install`.
+- Start command: `npm start`.
+- Configure as variáveis de ambiente acima no Render.
+- Para preservar clientes, cotações, compras e milhas entre deploys, crie um Persistent Disk e defina `DATABASE_PATH` para um arquivo dentro do diretório de montagem.
+- Nunca publique `.env` nem o token da Duffel.
+
+## Execução local
+
+1. Instale Node.js 22.
+2. Execute `npm install`.
+3. Copie `.env.example` para `.env` e preencha as variáveis necessárias.
+4. Execute `npm start`.
+5. Site: `http://localhost:3000`; painel: `http://localhost:3000/admin`; conta: `http://localhost:3000/conta`.
+6. Verifique sintaxe com `npm run check`.
+
+## O que mudou
+
+- Busca por origem/destino IATA, ida, volta, passageiros e classe. A lista inicial de aeroportos populares já vem incluída e não exige cadastro manual no painel.
+- Módulo de provedor separado em `services/flightProviders/`, com adaptador Duffel e ponto de extensão para trocar de provedor.
+- Validação da pesquisa e tratamento de timeout, limite de chamadas, falhas do provedor e ausência de resultados.
+- Somente ofertas com `live_mode=true` são exibidas; token de teste é recusado para a busca pública.
+- Os cartões indicam companhia, horários, duração, escalas, preço total retornado e fonte. A tela de detalhes mostra os trechos de ida e volta.
+- Ao pedir cotação de uma oferta externa, o servidor consulta a oferta novamente e valida rota, datas e passageiros antes de registrar a cotação e abrir o WhatsApp comercial.
+- A busca de voos é pública, mas para registrar uma cotação e abrir o WhatsApp é necessário entrar na conta do cliente. A solicitação fica vinculada ao usuário autenticado.
+- O painel de voos manuais continua disponível para casos verificados, mas não é necessário cadastrar cada voo para usar a busca automática.
+- Banco SQLite criado automaticamente se o diretório de destino não existir.
+
+## Limitações importantes
+
+- Esta integração de código não ativa uma conta de fornecedor nem cria credenciais. Antes de mostrar ofertas reais, é necessário obter um token live válido e confirmar no painel do fornecedor as permissões e condições comerciais para LATAM, Azul e GOL.
+- A cobertura de catálogo não é garantia de resultados para todas as rotas; a aplicação informa quando não há ofertas.
+- A cotação pelo WhatsApp não emite passagem nem garante o preço: a equipe deve confirmar preço e disponibilidade antes de vender.
+- O SQLite só persiste no Render se o serviço tiver Persistent Disk corretamente configurado.
+- A recuperação de senha por e-mail só funciona depois de configurar SMTP.
+- Não há gateway de pagamento integrado. O painel preserva gestão de compras confirmadas e milhas.
+
+
+## Nota sobre as credenciais
+
+Este ZIP não contém um token real da Duffel. Até que `DUFFEL_ACCESS_TOKEN` seja configurado com credenciais live válidas e a conta tenha permissão para consultar as companhias/rotas necessárias, a aplicação informa que a busca automática não está pronta e não inventa voos ou preços. O status pode ser consultado em `/api/flight-provider-status`.
