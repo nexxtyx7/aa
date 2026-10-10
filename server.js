@@ -101,7 +101,7 @@ const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'')) && String(e
 app.use(helmet({contentSecurityPolicy:false}));
 app.use(express.json());
 app.use(morgan('tiny'));
-app.use(express.static(path.join(__dirname,'public')));
+app.use(express.static(__dirname));
 
 app.post('/api/admin/login',(req,res)=>{if(!ADMIN_PASSWORD || String(req.body.password||'')!==ADMIN_PASSWORD)return res.status(401).json({error:'Senha inválida. Configure ADMIN_PASSWORD no ambiente.'});res.setHeader('Set-Cookie',`aa_admin=${cookieToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`);res.json({ok:true});});
 app.post('/api/admin/logout',(req,res)=>{res.setHeader('Set-Cookie','aa_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');res.json({ok:true});});
