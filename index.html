@@ -139,12 +139,12 @@
 @media(max-width:700px){.destination-grid.jiu-grid .jiu-card{min-height:240px}.destination-grid.jiu-grid .jiu-card>img{width:72%;opacity:1}.destination-grid.jiu-grid .jiu-card::before{background:linear-gradient(90deg,#071629 0%,rgba(7,22,41,.86) 25%,rgba(7,22,41,.58) 50%,rgba(7,22,41,.12) 100%)}.destination-grid.jiu-grid .jiu-card .destination-info{width:66%;padding:16px}.destination-grid.jiu-grid .jiu-card .destination-index{left:16px;top:14px;max-width:60%;font-size:7px}.destination-grid.jiu-grid .jiu-card .destination-info h3{font-size:19px}.destination-grid.jiu-grid .jiu-card .destination-info p{font-size:10px}}
 </style>
 <style>.nav-cta.is-profile{display:inline-flex;align-items:center;gap:9px}.profile-silhouette{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.3)}.profile-label{font-size:.92em}@media(max-width:520px){.profile-label{display:none}}</style>
-<style id="aa-chrome-color-fix">
-/* Fallbacks explícitos: não dependem de transparências para o fundo principal */
-.nav-cta { background-color:#0b2038 !important; color:#ffffff !important; }
-.nav-cta.is-profile { background-color:#0b2038 !important; color:#ffffff !important; }
-.profile-silhouette { background-color:#203b58 !important; border-color:#66829e !important; color:#8ec4ff !important; }
-.profile-silhouette svg { stroke:#8ec4ff !important; }
+<style id="aa-profile-transparent-fix">
+/* Perfil sem placa colorida: o fundo transparente acompanha qualquer seção do site. */
+.nav-cta.is-profile{background:transparent!important;background-color:transparent!important;color:inherit!important;border-color:transparent!important;box-shadow:none!important;padding:0 4px!important;display:inline-flex;align-items:center;gap:9px}
+.profile-silhouette{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;background:transparent!important;background-color:transparent!important;border:1px solid currentColor!important;color:inherit!important;box-shadow:none!important}
+.profile-silhouette svg{stroke:currentColor!important}
+.profile-label{color:inherit!important}
 </style>
 </head>
 <body>
