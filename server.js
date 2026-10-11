@@ -228,16 +228,22 @@ app.delete('/api/admin/flights/:id',requireAdmin,(req,res)=>{db.prepare('DELETE 
 // Customer accounts: passwords are scrypt-hashed; session tokens are stored only as SHA-256 digests.
 const loginAttempts=new Map();
 
-const mailConfigured=()=>Boolean(process.env.SMTP_HOST&&process.env.SMTP_USER&&process.env.SMTP_PASS&&process.env.MAIL_FROM);
+const mailConfigured=()=>Boolean(process.env.MAIL_FROM&&(process.env.BREVO_API_KEY||(process.env.SMTP_HOST&&process.env.SMTP_USER&&process.env.SMTP_PASS)));
 function emailEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function sendBrandedEmail({to,subject,kicker,title,greeting,paragraph,buttonText,buttonUrl,footnote}) {
   if(!mailConfigured()) return false;
-  const transporter=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||'false')==='true',auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:10000});
   const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');
   const safeName=emailEscape(greeting||'');
   const button=buttonText&&buttonUrl?'<p style="margin:28px 0 22px"><a href="'+buttonUrl+'" style="display:inline-block;background:#176fc1;color:#fff;text-decoration:none;padding:15px 24px;border-radius:10px;font-weight:700;font-size:15px">'+emailEscape(buttonText)+' &nbsp; ↗</a></p>':'';
   const html='<!doctype html><html><body style="margin:0;padding:0;background:#edf2f8;font-family:Arial,Helvetica,sans-serif;color:#132d49"><div style="display:none;max-height:0;overflow:hidden;opacity:0">'+emailEscape(paragraph||'')+'</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf2f8;padding:28px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:18px;overflow:hidden"><tr><td style="background:#082849;padding:28px 30px 30px;color:#fff"><div style="font-size:12px;letter-spacing:2px;font-weight:800;color:#8fc5ff">ANDRÉ AÉREAS</div><div style="font-size:11px;letter-spacing:3px;color:#c3d8ee;margin-top:8px">SUA PRÓXIMA JORNADA COMEÇA AQUI</div><div style="margin-top:24px;height:4px;width:64px;background:#4ca3ff;border-radius:5px"></div><div style="font-size:25px;line-height:1.25;font-weight:800;margin-top:18px">'+emailEscape(title)+'</div></td></tr><tr><td style="padding:30px"><div style="font-size:11px;letter-spacing:1.8px;text-transform:uppercase;color:#2877bd;font-weight:800">'+emailEscape(kicker||'ANDRÉ AÉREAS')+'</div><h1 style="font-size:23px;line-height:1.3;margin:12px 0 16px;color:#122c48">'+(safeName?'Olá, '+safeName+'!':'Olá!')+'</h1><p style="font-size:15px;line-height:1.8;color:#50657c;margin:0">'+emailEscape(paragraph||'')+'</p>'+button+'<div style="background:#f2f7fc;border:1px solid #e1ebf5;border-radius:12px;padding:16px;font-size:12px;line-height:1.7;color:#61758a">'+emailEscape(footnote||'Se você não reconhece esta mensagem, pode ignorá-la.')+'</div></td></tr><tr><td style="padding:20px 30px;background:#f7f9fc;border-top:1px solid #e7edf4;color:#7b8da1;font-size:11px;line-height:1.7">André Aéreas · Sua viagem, com mais tranquilidade.<br><a href="'+baseUrl+'" style="color:#176fc1;text-decoration:none">Visitar nosso site</a><br>Esta é uma mensagem automática; não responda a este e-mail.</td></tr></table><div style="font-size:10px;color:#8798aa;padding:16px">© André Aéreas</div></td></tr></table></body></html>';
-  await transporter.sendMail({from:process.env.MAIL_FROM,to,subject,html,text:[greeting?'Olá, '+greeting+'!':'Olá!',paragraph,buttonText&&buttonUrl?buttonText+': '+buttonUrl:'',footnote||''].filter(Boolean).join('\n\n')});
+  const textContent=[greeting?'Olá, '+greeting+'!':'Olá!',paragraph,buttonText&&buttonUrl?buttonText+': '+buttonUrl:'',footnote||''].filter(Boolean).join('\n\n');
+  if(process.env.BREVO_API_KEY){
+    const response=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'accept':'application/json','api-key':process.env.BREVO_API_KEY,'content-type':'application/json'},body:JSON.stringify({sender:{email:process.env.MAIL_FROM,name:process.env.MAIL_FROM_NAME||'André Aéreas'},to:[{email:to}],subject,htmlContent:html,textContent})});
+    if(!response.ok){const details=(await response.text()).slice(0,500);throw new Error('Brevo API HTTP '+response.status+(details?': '+details:''));}
+  }else{
+    const transporter=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||'false')==='true',auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:10000});
+    await transporter.sendMail({from:process.env.MAIL_FROM,to,subject,html,text:textContent});
+  }
   return true;
 }
 app.post('/api/auth/register',async(req,res)=>{
