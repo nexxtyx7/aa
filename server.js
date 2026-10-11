@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import Database from 'better-sqlite3';
+import { createClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import path from 'node:path';
@@ -18,6 +19,14 @@ if (process.env.NODE_ENV === 'production' && (!ADMIN_PASSWORD || !process.env.SE
 const DATABASE_PATH = process.env.DATABASE_PATH || path.join(__dirname,'data','andre-aereas.db');
 mkdirSync(path.dirname(path.resolve(DATABASE_PATH)), { recursive: true });
 const db = new Database(DATABASE_PATH);
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || '';
+if (process.env.NODE_ENV === 'production' && (!supabaseUrl || !supabaseSecretKey)) {
+  throw new Error('Defina SUPABASE_URL e SUPABASE_SECRET_KEY no ambiente de produção.');
+}
+const supabase = supabaseUrl && supabaseSecretKey
+  ? createClient(supabaseUrl, supabaseSecretKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null;
 
 db.pragma('journal_mode = WAL');
 db.exec(`CREATE TABLE IF NOT EXISTS locations (
@@ -93,9 +102,24 @@ function cleanFlight(row){return {...row,active:Boolean(row.active)};}
 const hashPassword = (password, salt=crypto.randomBytes(16).toString('hex')) => ({salt, hash:crypto.scryptSync(password,salt,64).toString('hex')});
 const verifyPassword = (password, stored) => { try { const [salt,hash]=String(stored).split(':'); const actual=crypto.scryptSync(password,salt,64); const expected=Buffer.from(hash,'hex'); return actual.length===expected.length && crypto.timingSafeEqual(actual,expected); } catch { return false; } };
 const digest = token => crypto.createHash('sha256').update(token).digest('hex');
-function currentUser(req){ const token=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('aa_session='))?.slice(11); if(!token)return null; const row=db.prepare('SELECT u.id,u.name,u.email,u.role,u.active,s.expires_at FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=?').get(digest(decodeURIComponent(token))); if(!row||!row.active||row.expires_at<Date.now())return null; return row; }
-function requireUser(req,res,next){const u=currentUser(req);if(!u)return res.status(401).json({error:'Faça login para continuar.'});req.user=u;next();}
-function requireStaff(req,res,next){const u=currentUser(req);if(!u||!['admin','staff'].includes(u.role))return res.status(403).json({error:'Acesso administrativo necessário.'});req.user=u;next();}
+function localUserMirror(u){
+  db.prepare('INSERT OR IGNORE INTO users(id,name,email,password_hash,role,active,created_at) VALUES(?,?,?,?,?,?,?)')
+    .run(Number(u.id),u.name,u.email,u.password_hash,u.role||'customer',Number(u.active??1),u.created_at||new Date().toISOString());
+}
+async function currentUser(req){
+  const token=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('aa_session='))?.slice(11);
+  if(!token || !supabase)return null;
+  const {data:session,error:sessionError}=await supabase.from('user_sessions').select('user_id,expires_at').eq('token_hash',digest(decodeURIComponent(token))).gt('expires_at',Date.now()).maybeSingle();
+  if(sessionError)throw sessionError;
+  if(!session)return null;
+  const {data:u,error:userError}=await supabase.from('users').select('id,name,email,password_hash,role,active,created_at').eq('id',session.user_id).eq('active',1).maybeSingle();
+  if(userError)throw userError;
+  if(!u)return null;
+  localUserMirror(u);
+  return {id:Number(u.id),name:u.name,email:u.email,role:u.role,active:Number(u.active),expires_at:Number(session.expires_at)};
+}
+async function requireUser(req,res,next){try{const u=await currentUser(req);if(!u)return res.status(401).json({error:'Faça login para continuar.'});req.user=u;next();}catch(error){console.error('[supabase-auth] session lookup failed:',error.message);res.status(503).json({error:'Não foi possível validar sua sessão agora. Tente novamente.'});}}
+async function requireStaff(req,res,next){try{const u=await currentUser(req);if(!u||!['admin','staff'].includes(u.role))return res.status(403).json({error:'Acesso administrativo necessário.'});req.user=u;next();}catch(error){console.error('[supabase-auth] staff lookup failed:',error.message);res.status(503).json({error:'Não foi possível validar sua sessão agora. Tente novamente.'});}}
 function audit(admin,action,targetType,targetId,details={}){db.prepare('INSERT INTO admin_audit(admin_id,action,target_type,target_id,details) VALUES(?,?,?,?,?)').run(String(admin),action,targetType,String(targetId??''),JSON.stringify(details));}
 const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'')) && String(e).length<=254;
 
@@ -216,12 +240,93 @@ async function sendBrandedEmail({to,subject,kicker,title,greeting,paragraph,butt
   await transporter.sendMail({from:process.env.MAIL_FROM,to,subject,html,text:[greeting?'Olá, '+greeting+'!':'Olá!',paragraph,buttonText&&buttonUrl?buttonText+': '+buttonUrl:'',footnote||''].filter(Boolean).join('\n\n')});
   return true;
 }
-app.post('/api/auth/register',async(req,res)=>{const name=String(req.body.name||'').trim(),email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');if(name.length<2||name.length>100||!validEmail(email)||password.length<10||password.length>200)return res.status(400).json({error:'Informe nome, e-mail válido e senha com pelo menos 10 caracteres.'});const h=hashPassword(password);let emailSent=false;try{const info=db.prepare('INSERT INTO users(name,email,password_hash) VALUES(?,?,?)').run(name,email,`${h.salt}:${h.hash}`);if(mailConfigured()){try{const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');await sendBrandedEmail({to:email,subject:'Boas-vindas à André Aéreas',kicker:'BEM-VINDO A BORDO',title:'Sua próxima jornada começa aqui',greeting:name,paragraph:'Sua conta foi criada com sucesso! Agora você pode acessar sua área pessoal e acompanhar suas cotações e informações de viagem.',buttonText:'Acessar minha conta',buttonUrl:baseUrl+'/conta',footnote:'Guarde este e-mail para consultar os dados da sua conta. Se você não criou esta conta, entre em contato com o suporte.'});emailSent=true;}catch(mailError){console.error('Conta criada, mas falhou o e-mail de boas-vindas:',mailError.message);}}res.status(201).json({ok:true,user:{id:info.lastInsertRowid,name,email},emailSent});}catch(e){res.status(409).json({error:'Este e-mail já está cadastrado.'});}});
-app.post('/api/auth/login',(req,res)=>{const ip=req.ip||'unknown',now=Date.now(),a=loginAttempts.get(ip)||{n:0,until:0};if(a.until>now&&a.n>=8)return res.status(429).json({error:'Muitas tentativas. Aguarde alguns minutos.'});const email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');const u=db.prepare('SELECT * FROM users WHERE email=? AND active=1').get(email);if(!u||!verifyPassword(password,u.password_hash)){a.n++;if(a.n>=8)a.until=now+15*60*1000;loginAttempts.set(ip,a);return res.status(401).json({error:'E-mail ou senha inválidos.'});}loginAttempts.delete(ip);const token=crypto.randomBytes(32).toString('base64url');db.prepare('INSERT INTO user_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(digest(token),u.id,now+7*86400000);res.setHeader('Set-Cookie',`aa_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${process.env.NODE_ENV==='production'?'; Secure':''}`);res.json({ok:true,user:{id:u.id,name:u.name,email:u.email,role:u.role}});});
-app.post('/api/auth/logout',(req,res)=>{const token=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('aa_session='))?.slice(11);if(token)db.prepare('DELETE FROM user_sessions WHERE token_hash=?').run(digest(decodeURIComponent(token)));res.setHeader('Set-Cookie','aa_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');res.json({ok:true});});
-app.get('/api/auth/me',(req,res)=>{const u=currentUser(req);res.json({authenticated:!!u,user:u?{id:u.id,name:u.name,email:u.email,role:u.role}:null});});
-app.post('/api/auth/forgot-password',async(req,res)=>{const email=String(req.body.email||'').trim().toLowerCase(),u=db.prepare('SELECT id,name,email FROM users WHERE email=? AND active=1').get(email);const generic={ok:true,message:'Se a conta existir, enviaremos instruções de recuperação para o e-mail cadastrado.'};console.info('[password-reset] request received; matching active account:',!!u);if(!u)return res.json(generic);const token=crypto.randomBytes(32).toString('base64url');db.prepare('INSERT INTO password_resets(token_hash,user_id,expires_at) VALUES(?,?,?)').run(digest(token),u.id,Date.now()+30*60*1000);console.info('[password-reset] SMTP configured:',mailConfigured());if(mailConfigured()){try{const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');const link=baseUrl+'/conta?reset='+encodeURIComponent(token);await sendBrandedEmail({to:u.email,subject:'Recuperação de senha · André Aéreas',kicker:'SEGURANÇA DA CONTA',title:'Vamos recuperar seu acesso',greeting:u.name,paragraph:'Recebemos uma solicitação para redefinir a senha da sua conta. Use o botão abaixo para escolher uma nova senha.',buttonText:'Redefinir minha senha',buttonUrl:link,footnote:'Por segurança, este link expira em 30 minutos e só pode ser usado uma vez. Se você não pediu a recuperação, ignore esta mensagem.'});console.info('[password-reset] SMTP accepted recovery email');return res.json({ok:true,message:'Um e-mail de recuperação foi enviado para sua conta.'});}catch(err){console.error('Falha no envio de recuperação:',err.message);return res.status(503).json({error:'Não foi possível enviar o e-mail agora. Confira as configurações SMTP no Render e tente novamente.'});}}if(process.env.NODE_ENV!=='production'&&process.env.EXPOSE_DEV_RESET_TOKEN==='true')return res.json({...generic,devToken:token});return res.status(503).json({error:'A recuperação por e-mail ainda não está configurada. Configure SMTP_HOST, SMTP_USER, SMTP_PASS e MAIL_FROM no ambiente do servidor.'});});
-app.post('/api/auth/reset-password',(req,res)=>{const token=String(req.body.token||''),password=String(req.body.password||'');if(password.length<10)return res.status(400).json({error:'A nova senha deve ter pelo menos 10 caracteres.'});const r=db.prepare('SELECT * FROM password_resets WHERE token_hash=? AND used=0 AND expires_at>?').get(digest(token),Date.now());if(!r)return res.status(400).json({error:'Token inválido ou expirado.'});const h=hashPassword(password);const tx=db.transaction(()=>{db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(`${h.salt}:${h.hash}`,r.user_id);db.prepare('UPDATE password_resets SET used=1 WHERE token_hash=?').run(digest(token));db.prepare('DELETE FROM user_sessions WHERE user_id=?').run(r.user_id);});tx();res.json({ok:true});});
+app.post('/api/auth/register',async(req,res)=>{
+  const name=String(req.body.name||'').trim(),email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
+  if(name.length<2||name.length>100||!validEmail(email)||password.length<10||password.length>200)return res.status(400).json({error:'Informe nome, e-mail válido e senha com pelo menos 10 caracteres.'});
+  if(!supabase)return res.status(503).json({error:'O cadastro ainda não está conectado ao banco de dados.'});
+  const h=hashPassword(password),passwordHash=`${h.salt}:${h.hash}`;let emailSent=false;
+  try{
+    const {data:u,error}=await supabase.from('users').insert({name,email,password_hash:passwordHash}).select('id,name,email,password_hash,role,active,created_at').single();
+    if(error)throw error;
+    localUserMirror(u);
+    if(mailConfigured()){try{const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');await sendBrandedEmail({to:email,subject:'Boas-vindas à André Aéreas',kicker:'BEM-VINDO A BORDO',title:'Sua próxima jornada começa aqui',greeting:name,paragraph:'Sua conta foi criada com sucesso! Agora você pode acessar sua área pessoal e acompanhar suas cotações e informações de viagem.',buttonText:'Acessar minha conta',buttonUrl:baseUrl+'/conta',footnote:'Guarde este e-mail para consultar os dados da sua conta. Se você não criou esta conta, entre em contato com o suporte.'});emailSent=true;}catch(mailError){console.error('Conta criada, mas falhou o e-mail de boas-vindas:',mailError.message);}}
+    res.status(201).json({ok:true,user:{id:Number(u.id),name,email},emailSent});
+  }catch(e){console.error('[supabase-auth] register failed:',e.message);const duplicate=e.code==='23505'||/duplicate key|already exists/i.test(e.message||'');res.status(duplicate?409:503).json({error:duplicate?'Este e-mail já está cadastrado.':'Não foi possível criar a conta agora. Tente novamente.'});}
+});
+app.post('/api/auth/login',async(req,res)=>{
+  const ip=req.ip||'unknown',now=Date.now(),a=loginAttempts.get(ip)||{n:0,until:0};
+  if(a.until>now&&a.n>=8)return res.status(429).json({error:'Muitas tentativas. Aguarde alguns minutos.'});
+  const email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
+  if(!supabase)return res.status(503).json({error:'O login ainda não está conectado ao banco de dados.'});
+  try{
+    const {data:u,error}=await supabase.from('users').select('id,name,email,password_hash,role,active,created_at').eq('email',email).eq('active',1).maybeSingle();
+    if(error)throw error;
+    if(!u||!verifyPassword(password,u.password_hash)){a.n++;if(a.n>=8)a.until=now+15*60*1000;loginAttempts.set(ip,a);return res.status(401).json({error:'E-mail ou senha inválidos.'});}
+    loginAttempts.delete(ip);localUserMirror(u);
+    const token=crypto.randomBytes(32).toString('base64url'),tokenHash=digest(token),expiresAt=now+7*86400000;
+    const {error:sessionError}=await supabase.from('user_sessions').insert({token_hash:tokenHash,user_id:u.id,expires_at:expiresAt});
+    if(sessionError)throw sessionError;
+    db.prepare('INSERT OR REPLACE INTO user_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(tokenHash,Number(u.id),expiresAt);
+    res.setHeader('Set-Cookie',`aa_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${process.env.NODE_ENV==='production'?'; Secure':''}`);
+    res.json({ok:true,user:{id:Number(u.id),name:u.name,email:u.email,role:u.role}});
+  }catch(error){console.error('[supabase-auth] login failed:',error.message);res.status(503).json({error:'Não foi possível entrar agora. Tente novamente.'});}
+});
+app.post('/api/auth/logout',async(req,res)=>{
+  const token=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('aa_session='))?.slice(11);
+  try{if(token){const tokenHash=digest(decodeURIComponent(token));if(supabase){const {error}=await supabase.from('user_sessions').delete().eq('token_hash',tokenHash);if(error)throw error;}db.prepare('DELETE FROM user_sessions WHERE token_hash=?').run(tokenHash);}}
+  catch(error){console.error('[supabase-auth] logout failed:',error.message);}
+  res.setHeader('Set-Cookie','aa_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');res.json({ok:true});
+});
+app.get('/api/auth/me',async(req,res)=>{try{const u=await currentUser(req);res.json({authenticated:!!u,user:u?{id:u.id,name:u.name,email:u.email,role:u.role}:null});}catch(error){console.error('[supabase-auth] me failed:',error.message);res.status(503).json({authenticated:false,user:null});}});
+app.post('/api/auth/forgot-password',async(req,res)=>{
+  const email=String(req.body.email||'').trim().toLowerCase();
+  const generic={ok:true,message:'Se a conta existir, enviaremos instruções de recuperação para o e-mail cadastrado.'};
+  if(!supabase)return res.status(503).json({error:'A recuperação ainda não está conectada ao banco de dados.'});
+  try{
+    const {data:u,error}=await supabase.from('users').select('id,name,email').eq('email',email).eq('active',1).maybeSingle();
+    if(error)throw error;
+    console.info('[password-reset] matching active account:',!!u);
+    if(!u)return res.json(generic);
+    const token=crypto.randomBytes(32).toString('base64url'),tokenHash=digest(token),expiresAt=Date.now()+30*60*1000;
+    const {error:resetError}=await supabase.from('password_resets').insert({token_hash:tokenHash,user_id:u.id,expires_at:expiresAt,used:0});
+    if(resetError)throw resetError;
+    db.prepare('INSERT OR REPLACE INTO password_resets(token_hash,user_id,expires_at,used) VALUES(?,?,?,0)').run(tokenHash,Number(u.id),expiresAt);
+    console.info('[password-reset] SMTP configured:',mailConfigured());
+    if(mailConfigured()){
+      try{
+        const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');
+        const link=baseUrl+'/conta?reset='+encodeURIComponent(token);
+        await sendBrandedEmail({to:u.email,subject:'Recuperação de senha · André Aéreas',kicker:'SEGURANÇA DA CONTA',title:'Vamos recuperar seu acesso',greeting:u.name,paragraph:'Recebemos uma solicitação para redefinir a senha da sua conta. Use o botão abaixo para escolher uma nova senha.',buttonText:'Redefinir minha senha',buttonUrl:link,footnote:'Por segurança, este link expira em 30 minutos e só pode ser usado uma vez. Se você não pediu a recuperação, ignore esta mensagem.'});
+        console.info('[password-reset] SMTP accepted recovery email');
+        return res.json({ok:true,message:'Um e-mail de recuperação foi enviado para sua conta.'});
+      }catch(err){console.error('Falha no envio de recuperação:',err.message);return res.status(503).json({error:'Não foi possível enviar o e-mail agora. Confira as configurações SMTP no Render e tente novamente.'});}
+    }
+    if(process.env.NODE_ENV!=='production'&&process.env.EXPOSE_DEV_RESET_TOKEN==='true')return res.json({...generic,devToken:token});
+    return res.status(503).json({error:'A recuperação por e-mail ainda não está configurada. Configure SMTP_HOST, SMTP_USER, SMTP_PASS e MAIL_FROM no ambiente do servidor.'});
+  }catch(error){console.error('[supabase-auth] password reset request failed:',error.message);return res.status(503).json({error:'Não foi possível processar a recuperação agora. Tente novamente.'});}
+});
+app.post('/api/auth/reset-password',async(req,res)=>{
+  const token=String(req.body.token||''),password=String(req.body.password||'');
+  if(password.length<10)return res.status(400).json({error:'A nova senha deve ter pelo menos 10 caracteres.'});
+  if(!supabase)return res.status(503).json({error:'A recuperação ainda não está conectada ao banco de dados.'});
+  const tokenHash=digest(token);
+  try{
+    const {data:r,error}=await supabase.from('password_resets').select('user_id,expires_at,used').eq('token_hash',tokenHash).eq('used',0).gt('expires_at',Date.now()).maybeSingle();
+    if(error)throw error;
+    if(!r)return res.status(400).json({error:'Token inválido ou expirado.'});
+    const h=hashPassword(password),passwordHash=`${h.salt}:${h.hash}`;
+    const {error:updateError}=await supabase.from('users').update({password_hash:passwordHash}).eq('id',r.user_id);
+    if(updateError)throw updateError;
+    const {error:usedError}=await supabase.from('password_resets').update({used:1}).eq('token_hash',tokenHash);
+    if(usedError)throw usedError;
+    const {error:sessionError}=await supabase.from('user_sessions').delete().eq('user_id',r.user_id);
+    if(sessionError)throw sessionError;
+    db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(passwordHash,Number(r.user_id));
+    db.prepare('UPDATE password_resets SET used=1 WHERE token_hash=?').run(tokenHash);
+    db.prepare('DELETE FROM user_sessions WHERE user_id=?').run(Number(r.user_id));
+    res.json({ok:true});
+  }catch(error){console.error('[supabase-auth] password reset failed:',error.message);res.status(503).json({error:'Não foi possível redefinir a senha agora. Tente novamente.'});}
+});
 app.post('/api/quotes', requireUser, async (req,res)=>{
   const u=req.user,b=req.body||{};
   const origin=String(b.origin||'').trim().slice(0,120),destination=String(b.destination||'').trim().slice(0,120);
