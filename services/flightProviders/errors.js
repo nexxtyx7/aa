@@ -6,4 +6,3 @@ export class FlightProviderError extends Error {
     this.code = code;
   }
 }
-
