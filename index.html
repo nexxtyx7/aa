@@ -248,8 +248,9 @@ const form = $("#flight-form");
 // Cabeçalho sincronizado com a sessão segura do servidor.
 async function syncAccountHeader(){
   const cta=document.getElementById('account-cta'); if(!cta)return;
-  let user=null;try{const r=await fetch('/api/auth/me',{credentials:'same-origin'});const d=await r.json();if(d.authenticated)user=d.user}catch{}
+  // Define o destino imediatamente para o clique funcionar mesmo se a API demorar.
   cta.href='conta.html';
+  let user=null;try{const r=await fetch('/api/auth/me',{credentials:'same-origin'});const d=await r.json();if(d.authenticated)user=d.user}catch{}
   if(user){cta.innerHTML='<span aria-hidden="true" class="profile-silhouette"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="7.5" r="3.5"></circle><path d="M4.5 21c.5-4.4 3.2-6.7 7.5-6.7s7 2.3 7.5 6.7"></path></svg></span><span class="profile-label">Minha conta</span>';cta.setAttribute('aria-label','Abrir minha conta');cta.classList.add('is-profile');}
   else{cta.innerHTML='Planejar viagem <span>↗</span>';cta.setAttribute('aria-label','Planejar viagem');cta.classList.remove('is-profile');}
 }
