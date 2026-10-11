@@ -132,6 +132,7 @@ app.use(express.static(path.join(__dirname,'public')));
 app.post('/api/admin/login',(req,res)=>{if(!ADMIN_PASSWORD || String(req.body.password||'')!==ADMIN_PASSWORD)return res.status(401).json({error:'Senha inválida. Configure ADMIN_PASSWORD no ambiente.'});res.setHeader('Set-Cookie',`aa_admin=${cookieToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`);res.json({ok:true});});
 app.post('/api/admin/logout',(req,res)=>{res.setHeader('Set-Cookie','aa_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');res.json({ok:true});});
 app.get('/api/admin/me',(req,res)=>res.json({authenticated:isAdmin(req)}));
+app.get('/api/admin/storage-status',requireAdmin,(req,res)=>{const configured=Boolean(process.env.DATABASE_PATH);res.json({configured,databasePath:process.env.DATABASE_PATH||'data/andre-aereas.db',persistentDiskRecommended:process.env.NODE_ENV==='production'&&!configured,message:process.env.NODE_ENV==='production'&&!configured?'O banco está usando o disco local temporário. Configure DATABASE_PATH para um arquivo dentro do Persistent Disk do Render para preservar dados entre deploys e reinicializações.':'Caminho do banco configurado. Confirme no Render que o caminho está dentro do ponto de montagem do Persistent Disk.'});});
 app.get('/api/flight-provider-status',(req,res)=>res.json(flightProviderStatus()));
 
 const DEFAULT_AIRPORTS = [
