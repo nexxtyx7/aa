@@ -344,11 +344,10 @@ $$(".destination-card:not(.jiu-card)").forEach(card => card.addEventListener("cl
 
 function parseCity(value) {
   const raw=String(value||'').trim();
-  const match=raw.match(/\\(([A-Z]{3})\\)\\s*$/i);
+  const match=raw.match(/\(([A-Z]{3})\)\s*$/i);
   if(match)return match[1].toUpperCase();
   if(/^[A-Z]{3}$/i.test(raw))return raw.toUpperCase();
-  // Envie o nome completo ao servidor: ele resolve qualquer cidade ativa do catálogo
-  // para o código IATA, em vez de transformar "Lisboa" em "LIS" por adivinhação.
+  // Envie o nome completo ao servidor: ele resolve qualquer cidade ativa do catálogo.
   return raw;
 }
 function formatDate(value) { if (!value) return "Data não informada"; const [y,m,d]=value.split("-"); return `${d}/${m}/${y}`; }
@@ -359,7 +358,7 @@ async function loadLocations(){
   try{
     liveLocations=await fetch('/api/locations').then(r=>r.json());
     const list=$("#airports");
-    const cityOptions=[...new Map(liveLocations.filter(x=>x.city).map(x=>[String(x.city).normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase(),x])).values()];
+    const cityOptions=[...new Map(liveLocations.filter(x=>x.city).map(x=>[String(x.city).toLowerCase().trim(),x])).values()];
     list.innerHTML=cityOptions.map(x=>`<option value="${escapeHtml(x.city)}">`).join('');
     // Inputs começam vazios: o usuário escolhe um local real cadastrado no painel.
     if(!$("#origin").value && cityOptions[0]) $("#origin").placeholder=`Ex.: ${cityOptions[0].city}`;
