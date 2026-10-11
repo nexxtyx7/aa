@@ -137,6 +137,7 @@
 .destination-grid.jiu-grid .jiu-card .destination-info p{font-size:11px;line-height:1.55;max-width:34ch}
 .destination-grid.jiu-grid .jiu-card .round-arrow{flex-shrink:0;width:32px;height:32px}
 @media(max-width:700px){.destination-grid.jiu-grid .jiu-card{min-height:240px}.destination-grid.jiu-grid .jiu-card>img{width:72%;opacity:1}.destination-grid.jiu-grid .jiu-card::before{background:linear-gradient(90deg,#071629 0%,rgba(7,22,41,.86) 25%,rgba(7,22,41,.58) 50%,rgba(7,22,41,.12) 100%)}.destination-grid.jiu-grid .jiu-card .destination-info{width:66%;padding:16px}.destination-grid.jiu-grid .jiu-card .destination-index{left:16px;top:14px;max-width:60%;font-size:7px}.destination-grid.jiu-grid .jiu-card .destination-info h3{font-size:19px}.destination-grid.jiu-grid .jiu-card .destination-info p{font-size:10px}}
+.flight-result-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:10px}.flight-result-actions .select-flight{white-space:normal}.flight-result-actions .detail-request{background:#0b2038;color:#fff}
 </style>
 <style>.nav-cta.is-profile{display:inline-flex;align-items:center;gap:9px}.profile-silhouette{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.3)}.profile-label{font-size:.92em}@media(max-width:520px){.profile-label{display:none}}</style>
 <style id="aa-profile-transparent-fix">
@@ -361,7 +362,7 @@ function renderResults(response) {
     <div class="flight-main"><div class="flight-time"><strong>${escapeHtml(f.departure_time)}</strong><small>${escapeHtml(f.origin_city)} (${escapeHtml(f.origin_code)})</small></div>
     <div class="flight-duration"><span>${durationLabel(f.duration_minutes)}</span><div class="flight-line"><i></i>${Number(f.stops)===0?'Direto':`${Number(f.stops)} escala${Number(f.stops)>1?'s':''}`}<i></i></div><small>${escapeHtml(f.flight_code)}</small></div>
     <div class="flight-time"><strong>${escapeHtml(f.arrival_time)}</strong><small>${escapeHtml(f.destination_city)} (${escapeHtml(f.destination_code)})</small></div></div>
-    <div class="flight-price"><strong>${flightPrice(f.price,f.currency||'BRL')}</strong><small>Total da oferta · ${Number(f.passenger_count||$('#passengers').value)} passageiro(s) · ${escapeHtml(f.cabin||'Classe conforme oferta')}</small><small class="flight-source-label">Fonte: ${escapeHtml(f.source||'Fonte não informada')}</small><button class="select-flight" type="button" data-flight-details="${escapeHtml(f.id)}">Ver detalhes ↗</button></div></article>`).join('');
+    <div class="flight-price"><strong>${flightPrice(f.price,f.currency||'BRL')}</strong><small>Total da oferta · ${Number(f.passenger_count||$('#passengers').value)} passageiro(s) · ${escapeHtml(f.cabin||'Classe conforme oferta')}</small><small class="flight-source-label">Fonte: ${escapeHtml(f.source||'Fonte não informada')}</small><div class="flight-result-actions"><button class="select-flight" type="button" data-flight-details="${escapeHtml(f.id)}">Ver detalhes</button><button class="select-flight detail-request" type="button" data-request-card="${escapeHtml(f.id)}">Solicitar cotação pelo WhatsApp ↗</button></div></div></article>`).join('');
   $('#empty-results').hidden=flights.length>0;
   if(!flights.length) $('#empty-results').textContent=provider.status==='no_results'
     ? 'A fonte consultada não retornou ofertas para esta pesquisa. Tente outras datas ou solicite uma cotação manual pelo WhatsApp.'
@@ -369,6 +370,14 @@ function renderResults(response) {
       ? 'Nenhuma oferta automática está disponível neste momento. A integração ainda precisa de credenciais live válidas; nenhum voo ou preço fictício foi criado.'
       : 'Nenhuma oferta verificada foi encontrada para essa rota e data.';
   const details=$('#flight-details'); details.hidden=true; details.innerHTML='';
+  $$('#flight-results [data-request-card]').forEach(button=>button.addEventListener('click',async()=>{
+    const f=flights.find(item=>String(item.id)===button.dataset.requestCard); if(!f)return;
+    const tab=window.open('about:blank','_blank');
+    const body={origin:`${f.origin_city||f.origin_code} (${f.origin_code})`,destination:`${f.destination_city||f.destination_code} (${f.destination_code})`,departure_date:f.departure_date||$('#departure').value,return_date:f.return_date||(tripType==='oneway'?null:$('#return').value),passengers:Number(f.passenger_count||$('#passengers').value)};
+    if(f.provider_offer_id) body.provider_offer_id=f.provider_offer_id; else body.flight_id=f.id;
+    try { const response=await fetch('/api/quotes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const result=await response.json(); if(!response.ok)throw Error(result.error||'Não foi possível registrar a cotação.'); if(tab)tab.location.href=result.whatsapp_url;else window.location.href=result.whatsapp_url; }
+    catch(error){if(tab)tab.close();showToast(error.message||'Erro ao preparar a cotação.');}
+  }));
   $$('#flight-results [data-flight-details]').forEach(button=>button.addEventListener('click',()=>{
     const f=flights.find(item=>String(item.id)===button.dataset.flightDetails); if(!f)return;
     details.innerHTML=`<div class="flight-details-head"><div><span class="section-kicker">DETALHES DA OFERTA</span><h3>${escapeHtml(f.airline_name||'Companhia aérea não informada')}</h3><p>${escapeHtml(f.flight_code)} · Fonte: ${escapeHtml(f.source||'Não informada')}</p></div><button type="button" class="modal-close details-close" aria-label="Fechar detalhes">×</button></div>
@@ -395,7 +404,9 @@ function renderResults(response) {
 }
 async function searchFlights(){
   const origin=parseCity($('#origin').value), destination=parseCity($('#destination').value);
-  const params=new URLSearchParams({origin,destination,date:$('#departure').value,tripType,passengers:$('#passengers').value,cabin:String($('#cabin').value||'economy').toLowerCase()});
+  const cabinLabel=String($('#cabin').value||'Econômica').toLowerCase();
+  const cabinMap={'econômica':'economy','economica':'economy','econômica premium':'premium_economy','economica premium':'premium_economy','executiva':'business','primeira classe':'first'};
+  const params=new URLSearchParams({origin,destination,date:$('#departure').value,tripType,passengers:$('#passengers').value,cabin:cabinMap[cabinLabel]||'economy'});
   if(tripType!=='oneway') params.set('returnDate',$('#return').value);
   const response=await fetch(`/api/flights?${params}`);
   const payload=await response.json().catch(()=>({}));
@@ -481,7 +492,7 @@ window.addEventListener('load', function(){
     'GRU':{name:'São Paulo',lat:-23.4356,lon:-46.4731},'GIG':{name:'Rio de Janeiro',lat:-22.8099,lon:-43.2505},'BSB':{name:'Brasília',lat:-15.8697,lon:-47.9208},'CNF':{name:'Belo Horizonte',lat:-19.6338,lon:-43.9689},
     'LIS':{name:'Lisboa',lat:38.7742,lon:-9.1342},'CDG':{name:'Paris',lat:49.0097,lon:2.5479},'LHR':{name:'Londres',lat:51.47,lon:-0.4543},'JFK':{name:'Nova York',lat:40.6413,lon:-73.7781},'MAD':{name:'Madrid',lat:40.4983,lon:-3.5676},'HND':{name:'Tóquio',lat:35.5494,lon:139.7798},'DXB':{name:'Dubai',lat:25.2532,lon:55.3657},'EZE':{name:'Buenos Aires',lat:-34.8222,lon:-58.5358}
   };
-  function parseAirport(value){const match=(value||'').match(/\(([A-Z]{3})\)/);if(match&&airports[match[1]])return {code:match[1],...airports[match[1]]};const q=(value||'').toLowerCase();for(const [code,a] of Object.entries(airports))if(q.includes(a.name.toLowerCase()))return {code,...a};return {code:'GRU',...airports.GRU};}
+  function parseAirport(value){const raw=String(value||'').trim();const match=raw.match(/(?:\(([A-Z]{3})\)|\b([A-Z]{3})\b)/i);const code=(match?.[1]||match?.[2]||'').toUpperCase();if(code&&airports[code])return {code,...airports[code]};const q=raw.toLocaleLowerCase('pt-BR');for(const [knownCode,a] of Object.entries(airports))if(q.includes(a.name.toLocaleLowerCase('pt-BR')))return {code:knownCode,...a};if(!raw)return {code:'GRU',...airports.GRU};return {code:code||raw.slice(0,12).toUpperCase(),name:raw,lat:airports.GRU.lat,lon:airports.GRU.lon};}
   function point(lat,lon,r=1.015){const phi=(90-lat)*Math.PI/180,theta=(lon+180)*Math.PI/180;return new THREE.Vector3(-r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(theta));}
   try{
     renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));renderer.setClearColor(0x000000,0);
@@ -493,10 +504,10 @@ window.addEventListener('load', function(){
     const loader=new THREE.TextureLoader();loader.setCrossOrigin('anonymous');loader.load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg',tex=>{tex.colorSpace=THREE.SRGBColorSpace||THREE.sRGBEncoding;globe.material=new THREE.MeshPhongMaterial({map:tex,shininess:4,specular:new THREE.Color(0x182f45)});},undefined,()=>{});
     const atmosphere=new THREE.Mesh(new THREE.SphereGeometry(1.045,48,36),new THREE.MeshBasicMaterial({color:0x3ba8ff,transparent:true,opacity:.11,side:THREE.BackSide}));scene.add(atmosphere);
     routeGroup=new THREE.Group();scene.add(routeGroup);
-    function makeArc(a,b){const av=point(a.lat,a.lon),bv=point(b.lat,b.lon);const mid=av.clone().add(bv).normalize().multiplyScalar(1.22);const curve=new THREE.QuadraticBezierCurve3(av,mid,bv);const line=new THREE.Mesh(new THREE.TubeGeometry(curve,64,.006,5,false),new THREE.MeshBasicMaterial({color:0x68d4ff,transparent:true,opacity:.96}));routeGroup.add(line);const glow=new THREE.Mesh(new THREE.TubeGeometry(curve,64,.016,5,false),new THREE.MeshBasicMaterial({color:0x218dff,transparent:true,opacity:.22}));routeGroup.add(glow);return [av,bv];}
+    function makeArc(a,b){const av=point(a.lat,a.lon),bv=point(b.lat,b.lon);const mid=av.clone().add(bv).normalize().multiplyScalar(1.22);const curve=new THREE.QuadraticBezierCurve3(av,mid,bv);const line=new THREE.Mesh(new THREE.TubeGeometry(curve,64,.006,5,false),new THREE.MeshBasicMaterial({color:0x68d4ff,transparent:true,opacity:.96}));routeGroup.add(line);const glow=new THREE.Mesh(new THREE.TubeGeometry(curve,64,.016,5,false),new THREE.MeshBasicMaterial({color:0x218dff,transparent:true,opacity:.22}));routeGroup.add(glow);const t=.64,arrowPos=curve.getPoint(t),tangent=curve.getTangent(t).normalize();const arrow=new THREE.Mesh(new THREE.ConeGeometry(.025,.075,12),new THREE.MeshBasicMaterial({color:0xb7f0ff,emissive:0x267eb5,emissiveIntensity:.35}));arrow.position.copy(arrowPos);arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent);routeGroup.add(arrow);return [av,bv];}
     function addDot(pos,color){const dot=new THREE.Mesh(new THREE.SphereGeometry(.027,16,12),new THREE.MeshBasicMaterial({color}));dot.position.copy(pos.clone().normalize().multiplyScalar(1.035));routeGroup.add(dot);const halo=new THREE.Mesh(new THREE.SphereGeometry(.032,16,12),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.09}));halo.position.copy(dot.position);routeGroup.add(halo);}
     function updateRoute(){if(!routeGroup)return;while(routeGroup.children.length){const obj=routeGroup.children.pop();obj.geometry?.dispose();if(obj.material){if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose());else obj.material.dispose();}}const a=parseAirport(originInput.value),b=parseAirport(destInput.value);makeArc(a,b);addDot(point(a.lat,a.lon),0x9cecff);addDot(point(b.lat,b.lon),0x9cecff);
-      const ol=document.getElementById('route-origin-label'),dl=document.getElementById('route-destination-label');if(ol)ol.innerHTML='<small>ORIGEM</small><strong>'+a.code+'</strong><span>'+a.name+'</span>';if(dl)dl.innerHTML='<small>DESTINO</small><strong>'+b.code+'</strong><span>'+b.name+'</span>';
+      const ol=document.getElementById('route-origin-label'),dl=document.getElementById('route-destination-label');if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a.code;const span=document.createElement('span');span.textContent=a.name;ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b.code;const span=document.createElement('span');span.textContent=b.name;dl.append(small,strong,span);}
       const midLon=(a.lon+b.lon)/2;globe.rotation.y=-midLon*Math.PI/180;globe.rotation.x=-(a.lat+b.lat)/2*Math.PI/180*.32;atmosphere.rotation.copy(globe.rotation);routeGroup.rotation.copy(globe.rotation);
     }
     function resize(){const box=canvas.parentElement.getBoundingClientRect();const w=Math.max(1,box.width),h=Math.max(1,box.height);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
