@@ -147,6 +147,24 @@
 .profile-silhouette svg{stroke:currentColor!important}
 .profile-label{color:inherit!important}
 </style>
+
+<style id="aa-flight-loader-css">
+#aa-flight-loader{position:fixed;inset:0;z-index:2147483647;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(4,12,27,.82);backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px);font-family:var(--font,system-ui,sans-serif);color:#fff}
+#aa-flight-loader.is-visible{display:flex;animation:aaLoaderFade .2s ease-out}
+#aa-flight-loader .aa-loader-card{width:min(100%,430px);padding:32px 26px 27px;border:1px solid rgba(255,255,255,.16);border-radius:22px;background:linear-gradient(145deg,#102b49f7,#071629fa);box-shadow:0 28px 90px #0007;text-align:center}
+#aa-flight-loader .aa-loader-orbit{position:relative;display:grid;place-items:center;width:104px;height:104px;margin:0 auto 23px;border:1px solid #70bdff55;border-radius:50%;background:radial-gradient(circle,#2589e43d,transparent 70%)}
+#aa-flight-loader .aa-loader-orbit:before,#aa-flight-loader .aa-loader-orbit:after{content:"";position:absolute;inset:8px;border:1px dashed #8bcaff70;border-radius:50%;animation:aaLoaderOrbit 7s linear infinite}
+#aa-flight-loader .aa-loader-orbit:after{inset:-7px;border-color:#ffffff2b;animation-duration:12s;animation-direction:reverse}
+#aa-flight-loader .aa-loader-plane{font-size:42px;filter:drop-shadow(0 0 15px #5aaaffb0);animation:aaLoaderPlane 2s ease-in-out infinite}
+#aa-flight-loader .aa-loader-kicker{margin:0 0 9px;color:#8fcaff;font-size:10px;font-weight:800;letter-spacing:.2em;text-transform:uppercase}
+#aa-flight-loader .aa-loader-title{margin:0;font-size:clamp(23px,5vw,29px);line-height:1.15;letter-spacing:-.035em;font-weight:800;color:#fff}
+#aa-flight-loader .aa-loader-copy{max-width:315px;margin:12px auto 23px;color:#d4e2f1;font-size:13px;line-height:1.65}
+#aa-flight-loader .aa-loader-track{height:4px;overflow:hidden;border-radius:99px;background:#ffffff20}
+#aa-flight-loader .aa-loader-track span{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,#398eff,#a6e0ff);box-shadow:0 0 15px #58a9ffb0;animation:aaLoaderProgress 1.25s ease-in-out infinite}
+#aa-flight-loader .aa-loader-foot{margin:14px 0 0;color:#a8bbd0;font-size:10px}
+@keyframes aaLoaderFade{from{opacity:0}to{opacity:1}}@keyframes aaLoaderOrbit{to{transform:rotate(360deg)}}@keyframes aaLoaderPlane{0%,100%{transform:translate(-3px,2px) rotate(-8deg)}50%{transform:translate(4px,-3px) rotate(4deg)}}@keyframes aaLoaderProgress{from{transform:translateX(-115%)}to{transform:translateX(280%)}}
+@media(prefers-reduced-motion:reduce){#aa-flight-loader *,#aa-flight-loader *:before,#aa-flight-loader *:after{animation:none!important}}
+</style>
 </head>
 <body>
   <div class="announcement"><span class="pulse"></span> SUA PRÓXIMA HISTÓRIA COMEÇA AQUI <span class="announcement-line"></span><span>Descubra novos horizontes</span></div>
@@ -325,8 +343,12 @@ $$(".destination-card:not(.jiu-card)").forEach(card => card.addEventListener("cl
 }));
 
 function parseCity(value) {
-  const match = (value || '').match(/\(([^)]+)\)/);
-  return match ? match[1].toUpperCase() : (value || '').trim().slice(0, 3).toUpperCase();
+  const raw=String(value||'').trim();
+  const match=raw.match(/\(([A-Z]{3})\)\s*$/i);
+  if(match)return match[1].toUpperCase();
+  if(/^[A-Z]{3}$/i.test(raw))return raw.toUpperCase();
+  // Envie o nome completo ao servidor: ele resolve qualquer cidade ativa do catálogo.
+  return raw;
 }
 function formatDate(value) { if (!value) return "Data não informada"; const [y,m,d]=value.split("-"); return `${d}/${m}/${y}`; }
 function currency(value) { return Number(value).toLocaleString("pt-BR", {style:"currency",currency:"BRL",maximumFractionDigits:2}); }
@@ -336,10 +358,11 @@ async function loadLocations(){
   try{
     liveLocations=await fetch('/api/locations').then(r=>r.json());
     const list=$("#airports");
-    list.innerHTML=liveLocations.map(x=>`<option value="${x.city} (${x.code})">`).join('');
+    const cityOptions=[...new Map(liveLocations.filter(x=>x.city).map(x=>[String(x.city).toLowerCase().trim(),x])).values()];
+    list.innerHTML=cityOptions.map(x=>`<option value="${escapeHtml(x.city)}">`).join('');
     // Inputs começam vazios: o usuário escolhe um local real cadastrado no painel.
-    if(!$("#origin").value && liveLocations[0]) $("#origin").placeholder=`Ex.: ${liveLocations[0].city} (${liveLocations[0].code})`;
-    if(!$("#destination").value && liveLocations[1]) $("#destination").placeholder=`Ex.: ${liveLocations[1].city} (${liveLocations[1].code})`;
+    if(!$("#origin").value && cityOptions[0]) $("#origin").placeholder=`Ex.: ${cityOptions[0].city}`;
+    if(!$("#destination").value && cityOptions[1]) $("#destination").placeholder=`Ex.: ${cityOptions[1].city}`;
     document.dispatchEvent(new CustomEvent('andre:locations',{detail:liveLocations}));
   }catch(e){ showToast('Não foi possível carregar os locais cadastrados.'); }
 }
@@ -539,7 +562,7 @@ window.addEventListener('load', function(){
     function addDot(pos,color){const dot=new THREE.Mesh(new THREE.SphereGeometry(.027,16,12),new THREE.MeshBasicMaterial({color}));dot.position.copy(pos.clone().normalize().multiplyScalar(1.035));routeGroup.add(dot);const halo=new THREE.Mesh(new THREE.SphereGeometry(.032,16,12),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.09}));halo.position.copy(dot.position);routeGroup.add(halo);}
     function updateRoute(){if(!routeGroup)return;while(routeGroup.children.length){const obj=routeGroup.children.pop();obj.geometry?.dispose();if(obj.material){if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose());else obj.material.dispose();}}const a=parseAirport(originInput.value),b=parseAirport(destInput.value);
       const ol=document.getElementById('route-origin-label'),dl=document.getElementById('route-destination-label');
-      if(!a||!b){if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a?a.code:'AEROPORTO?';const span=document.createElement('span');span.textContent=a?a.name:'Confira a cidade ou código';ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b?b.code:'AEROPORTO?';const span=document.createElement('span');span.textContent=b?b.name:'Confira a cidade ou código';dl.append(small,strong,span);}return;}
+      if(!a||!b){if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a?a.code:(originInput.value.trim()||'—');const span=document.createElement('span');span.textContent=a?a.name:(originInput.value.trim()?'Local do catálogo':'Selecione uma cidade');ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b?b.code:(destInput.value.trim()||'—');const span=document.createElement('span');span.textContent=b?b.name:(destInput.value.trim()?'Local do catálogo':'Selecione uma cidade');dl.append(small,strong,span);}return;}
       makeArc(a,b);addDot(point(a.lat,a.lon),0x9cecff);addDot(point(b.lat,b.lon),0x9cecff);
       if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a.code;const span=document.createElement('span');span.textContent=a.name;ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b.code;const span=document.createElement('span');span.textContent=b.name;dl.append(small,strong,span);}
       const midLon=(a.lon+b.lon)/2;globe.rotation.y=(-90-midLon)*Math.PI/180;globe.rotation.x=-(a.lat+b.lat)/2*Math.PI/180*.32;atmosphere.rotation.copy(globe.rotation);routeGroup.rotation.copy(globe.rotation);}
@@ -552,6 +575,52 @@ window.addEventListener('load', function(){
 });
 </script>
 
+
+<div id="aa-flight-loader" role="status" aria-live="polite" aria-hidden="true">
+  <div class="aa-loader-card">
+    <div class="aa-loader-orbit"><span class="aa-loader-plane" aria-hidden="true">✈</span></div>
+    <p class="aa-loader-kicker">André Aéreas</p>
+    <h2 class="aa-loader-title">Buscando os melhores voos</h2>
+    <p class="aa-loader-copy">Estamos consultando as opções disponíveis para sua viagem. Aguarde só um instante.</p>
+    <div class="aa-loader-track" aria-hidden="true"><span></span></div>
+    <p class="aa-loader-foot">Consultando opções para sua rota</p>
+  </div>
+</div>
+<script id="aa-flight-loader-script">
+(function(){
+  if(window.__aaFlightLoaderInstalled)return;
+  window.__aaFlightLoaderInstalled=true;
+  var overlay=document.getElementById('aa-flight-loader');
+  if(!overlay)return;
+  var active=0,hideTimer=null;
+  function show(){
+    clearTimeout(hideTimer);
+    overlay.classList.add('is-visible');
+    overlay.setAttribute('aria-hidden','false');
+  }
+  function hide(){
+    active=Math.max(0,active-1);
+    if(active===0){
+      clearTimeout(hideTimer);
+      hideTimer=setTimeout(function(){
+        if(active===0){overlay.classList.remove('is-visible');overlay.setAttribute('aria-hidden','true');}
+      },220);
+    }
+  }
+  var nativeFetch=window.fetch.bind(window);
+  window.fetch=function(input,init){
+    var url=typeof input==='string'?input:(input&&input.url)||'';
+    if(!/\/api\/flights(?:[?#]|$)/i.test(url))return nativeFetch(input,init);
+    active++;
+    show();
+    return new Promise(function(resolve,reject){
+      requestAnimationFrame(function(){requestAnimationFrame(function(){
+        nativeFetch(input,init).then(resolve,reject);
+      });});
+    }).finally(hide);
+  };
+})();
+</script>
 </body>
 </html>
 <style>
