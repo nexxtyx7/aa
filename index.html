@@ -701,7 +701,7 @@ window.addEventListener('load', function(){
           camera.up.lerp(new THREE.Vector3(0,1,0),ease*.14).normalize();
           camera.lookAt(0,0,0);
         }
-        if(p>=1){if(cinematicCameraStart)camera.position.copy(cinematicCameraStart);camera.up.set(0,1,0);camera.lookAt(0,0,0);cinematicCameraStart=null;cinematicStart=0;}
+        if(p>=1){camera.position.set(0,0,4.4);camera.up.set(0,1,0);camera.lookAt(0,0,0);camera.updateProjectionMatrix();cinematicCameraStart=null;cinematicStart=0;}
       }
       if(autoRotate&&!dragging){globe.rotation.y+=.0009;atmosphere.rotation.y=globe.rotation.y;routeGroup.rotation.y=globe.rotation.y;}
       renderer.render(scene,camera);
