@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --env-file-if-exists=.env --watch server.js",
-    "check": "node --check server.js && node --check services/flightProviders/index.js && node --check services/flightProviders/duffel.js && node --check services/flightProviders/errors.js"
+    "check": "node --check server.js && node --check services/flightProviders/index.js && node --check services/flightProviders/duffel.js && node --check services/flightProviders/ignav.js && node --check services/flightProviders/errors.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
