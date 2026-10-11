@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 import path from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { searchProviderFlights, flightProviderStatus, getProviderOffer, FlightProviderError } from './services/flightProviders/index.js';
 import { fileURLToPath } from 'node:url';
 
@@ -126,6 +126,7 @@ const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'')) && String(e
 app.use(helmet({contentSecurityPolicy:false}));
 app.use(express.json());
 app.use(morgan('tiny'));
+app.get('/',(req,res)=>sendPage(res,'index.html'));
 app.use(express.static(path.join(__dirname,'public')));
 
 app.post('/api/admin/login',(req,res)=>{if(!ADMIN_PASSWORD || String(req.body.password||'')!==ADMIN_PASSWORD)return res.status(401).json({error:'Senha inválida. Configure ADMIN_PASSWORD no ambiente.'});res.setHeader('Set-Cookie',`aa_admin=${cookieToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`);res.json({ok:true});});
@@ -462,6 +463,80 @@ app.get('/api/admin/audit',requireAdmin,(req,res)=>res.json(db.prepare('SELECT *
 function sendPage(res, filename) {
   const publicPath = path.join(__dirname, 'public', filename);
   const rootPath = path.join(__dirname, filename);
+
+  // A página inicial recebe a tela de carregamento sem precisar alterar o HTML grande do site.
+  if (filename === 'index.html') {
+    let html;
+    try { html = readFileSync(publicPath, 'utf8'); }
+    catch {
+      try { html = readFileSync(rootPath, 'utf8'); }
+      catch { html = null; }
+    }
+    if (html !== null) {
+      const loadingScreen = `
+<style id="aa-flight-loading-styles">
+#aa-flight-loading-overlay{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(4,10,24,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#aa-flight-loading-overlay.aa-visible{display:flex;animation:aaFadeIn .22s ease-out}
+#aa-flight-loading-overlay .aa-loader-card{width:min(100%,440px);padding:34px 28px;border:1px solid rgba(255,255,255,.16);border-radius:24px;background:linear-gradient(145deg,rgba(20,35,63,.96),rgba(7,14,31,.97));box-shadow:0 28px 90px rgba(0,0,0,.4);text-align:center}
+#aa-flight-loading-overlay .aa-loader-orbit{position:relative;display:grid;place-items:center;width:112px;height:112px;margin:0 auto 24px;border:1px solid rgba(111,181,255,.3);border-radius:50%;background:radial-gradient(circle,rgba(52,132,255,.22),transparent 68%)}
+#aa-flight-loading-overlay .aa-loader-orbit:before,#aa-flight-loading-overlay .aa-loader-orbit:after{content:"";position:absolute;inset:9px;border:1px dashed rgba(132,195,255,.48);border-radius:50%;animation:aaOrbit 8s linear infinite}
+#aa-flight-loading-overlay .aa-loader-orbit:after{inset:-7px;border-color:rgba(255,255,255,.13);animation-duration:13s;animation-direction:reverse}
+#aa-flight-loading-overlay .aa-loader-plane{font-size:42px;display:block;filter:drop-shadow(0 0 18px rgba(85,166,255,.6));animation:aaPlane 2.2s ease-in-out infinite}
+#aa-flight-loading-overlay .aa-loader-kicker{margin:0 0 9px;color:#8fc8ff;font-size:11px;font-weight:800;letter-spacing:.19em;text-transform:uppercase}
+#aa-flight-loading-overlay .aa-loader-title{margin:0;color:#fff;font-size:clamp(23px,5vw,30px);font-weight:750;letter-spacing:-.035em;line-height:1.15}
+#aa-flight-loading-overlay .aa-loader-copy{margin:12px auto 23px;max-width:310px;color:rgba(235,242,255,.75);font-size:14px;line-height:1.6}
+#aa-flight-loading-overlay .aa-loader-track{height:4px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.13)}
+#aa-flight-loading-overlay .aa-loader-track span{display:block;width:42%;height:100%;border-radius:99px;background:linear-gradient(90deg,#62a8ff,#b2e1ff);box-shadow:0 0 16px rgba(98,168,255,.7);animation:aaProgress 1.35s ease-in-out infinite}
+#aa-flight-loading-overlay .aa-loader-foot{margin:15px 0 0;color:rgba(235,242,255,.5);font-size:11px}
+@keyframes aaFadeIn{from{opacity:0}to{opacity:1}}@keyframes aaOrbit{to{transform:rotate(360deg)}}@keyframes aaPlane{0%,100%{transform:translate(-3px,2px) rotate(-8deg)}50%{transform:translate(4px,-3px) rotate(4deg)}}@keyframes aaProgress{0%{transform:translateX(-110%)}100%{transform:translateX(250%)}}
+@media(prefers-reduced-motion:reduce){#aa-flight-loading-overlay *,#aa-flight-loading-overlay *:before,#aa-flight-loading-overlay *:after{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+</style>
+<div id="aa-flight-loading-overlay" role="status" aria-live="polite" aria-label="Buscando voos">
+  <div class="aa-loader-card">
+    <div class="aa-loader-orbit"><span class="aa-loader-plane" aria-hidden="true">✈</span></div>
+    <p class="aa-loader-kicker">André Aéreas</p>
+    <h2 class="aa-loader-title">Buscando os melhores voos</h2>
+    <p class="aa-loader-copy">Estamos consultando as opções disponíveis para sua viagem. Isso pode levar alguns instantes.</p>
+    <div class="aa-loader-track" aria-hidden="true"><span></span></div>
+    <p class="aa-loader-foot">Aguarde enquanto pesquisamos as opções</p>
+  </div>
+</div>
+<script id="aa-flight-loading-script">
+(function(){
+  var overlay=document.getElementById('aa-flight-loading-overlay');
+  if(!overlay||window.__aaFlightLoaderInstalled)return;
+  window.__aaFlightLoaderInstalled=true;
+  var pending=0,delayTimer=null,hideTimer=null;
+  function show(){clearTimeout(hideTimer);overlay.classList.add('aa-visible');overlay.setAttribute('aria-hidden','false');}
+  function scheduleShow(){clearTimeout(delayTimer);delayTimer=setTimeout(show,180);}
+  function hide(){pending=Math.max(0,pending-1);if(pending===0){clearTimeout(delayTimer);hideTimer=setTimeout(function(){overlay.classList.remove('aa-visible');overlay.setAttribute('aria-hidden','true');},180);}}
+  function isFlightSearch(input){
+    var url=typeof input==='string'?input:(input&&input.url)||'';
+    try{url=new URL(url,window.location.href).pathname;}catch(e){}
+    return /\/api\/(?:flights|flight-search|search-flights)(?:\/|$)/i.test(url)&&!/\/api\/admin\//i.test(url);
+  }
+  if(window.fetch){
+    var originalFetch=window.fetch.bind(window);
+    window.fetch=function(input,init){
+      if(!isFlightSearch(input))return originalFetch(input,init);
+      pending++;scheduleShow();
+      var result;
+      try{result=originalFetch(input,init);}catch(error){hide();throw error;}
+      return result.finally(hide);
+    };
+  }
+  window.addEventListener('pageshow',function(){pending=0;clearTimeout(delayTimer);clearTimeout(hideTimer);overlay.classList.remove('aa-visible');overlay.setAttribute('aria-hidden','true');});
+})();
+</script>`;
+      if (!html.includes('id="aa-flight-loading-overlay"')) {
+        const closingBody = /<\/body\s*>/i;
+        html = closingBody.test(html) ? html.replace(closingBody, loadingScreen + '</body>') : html + loadingScreen;
+      }
+      res.type('html').send(html);
+      return;
+    }
+  }
+
   res.sendFile(publicPath, (error) => {
     if (!error) return;
     res.sendFile(rootPath, (rootError) => {
