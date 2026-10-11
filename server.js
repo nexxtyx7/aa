@@ -336,9 +336,10 @@ async function sendBrandedEmail({to,subject,kicker,title,greeting,paragraph,butt
   }
   return true;
 }
+const MIN_PASSWORD_LENGTH = 8;
 app.post('/api/auth/register',async(req,res)=>{
   const name=String(req.body.name||'').trim(),email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
-  if(name.length<2||name.length>100||!validEmail(email)||password.length<8||password.length>200)return res.status(400).json({error:'Informe nome, e-mail válido e senha com pelo menos 8 caracteres.'});
+  if(name.length<2||name.length>100||!validEmail(email)||password.length<MIN_PASSWORD_LENGTH||password.length>200)return res.status(400).json({error:'Informe nome, e-mail válido e senha com pelo menos 8 caracteres.'});
   if(!supabase)return res.status(503).json({error:'O cadastro ainda não está conectado ao banco de dados.'});
   const h=hashPassword(password),passwordHash=`${h.salt}:${h.hash}`;
   try{
@@ -408,7 +409,7 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
 });
 app.post('/api/auth/reset-password',async(req,res)=>{
   const token=String(req.body.token||''),password=String(req.body.password||'');
-  if(password.length<8)return res.status(400).json({error:'A nova senha deve ter pelo menos 8 caracteres.'});
+  if(password.length<MIN_PASSWORD_LENGTH)return res.status(400).json({error:'A nova senha deve ter pelo menos 8 caracteres.'});
   if(!supabase)return res.status(503).json({error:'A recuperação ainda não está conectada ao banco de dados.'});
   const tokenHash=digest(token);
   try{
