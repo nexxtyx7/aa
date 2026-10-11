@@ -208,7 +208,7 @@ const mailConfigured=()=>Boolean(process.env.SMTP_HOST&&process.env.SMTP_USER&&p
 function emailEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function sendBrandedEmail({to,subject,kicker,title,greeting,paragraph,buttonText,buttonUrl,footnote}) {
   if(!mailConfigured()) return false;
-  const transporter=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||'false')==='true',auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}});
+  const transporter=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE||'false')==='true',auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:10000});
   const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');
   const safeName=emailEscape(greeting||'');
   const button=buttonText&&buttonUrl?'<p style="margin:28px 0 22px"><a href="'+buttonUrl+'" style="display:inline-block;background:#176fc1;color:#fff;text-decoration:none;padding:15px 24px;border-radius:10px;font-weight:700;font-size:15px">'+emailEscape(buttonText)+' &nbsp; ↗</a></p>':'';
