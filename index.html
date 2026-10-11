@@ -673,9 +673,13 @@ window.addEventListener('load', function(){
           const worldAhead=toWorld(pointAt(Math.min(1,t+.035)));
           const forward=worldAhead.sub(world).normalize();
           const radial=world.clone().normalize();
-          // Higher chase camera, slightly behind the route, with a clearer downward view.
-          const position=world.clone().add(radial.clone().multiplyScalar(.27)).sub(forward.clone().multiplyScalar(.27));
-          const lookTarget=toWorld(pointAt(Math.min(1,t+.105))).add(radial.clone().multiplyScalar(-.015));
+          // Wider side-tracking shot, farther from the surface, with a stable downward view.
+          const side=new THREE.Vector3().crossVectors(forward,radial).normalize();
+          const position=world.clone()
+            .add(radial.clone().multiplyScalar(.42))
+            .add(side.clone().multiplyScalar(.38))
+            .sub(forward.clone().multiplyScalar(.32));
+          const lookTarget=toWorld(pointAt(Math.min(1,t+.085))).add(radial.clone().multiplyScalar(-.025));
           return {position,lookTarget,up:radial};
         };
         if(p<approachEnd){
