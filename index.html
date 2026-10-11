@@ -361,8 +361,8 @@ async function loadLocations(){
     const airportOptions=liveLocations.filter(x=>x.city && x.airport && x.code);
     list.innerHTML=airportOptions.map(x=>`<option value="${escapeHtml(x.city+' — '+x.airport+' ('+x.code+')')}">`).join('');
     // Inputs começam vazios: o usuário escolhe um local real cadastrado no painel.
-    if(!$("#origin").value && cityOptions[0]) $("#origin").placeholder=`Ex.: ${cityOptions[0].city}`;
-    if(!$("#destination").value && cityOptions[1]) $("#destination").placeholder=`Ex.: ${cityOptions[1].city}`;
+    if(!$("#origin").value && airportOptions[0]) $("#origin").placeholder=`Ex.: ${airportOptions[0].city} — ${airportOptions[0].airport} (${airportOptions[0].code})`;
+    if(!$("#destination").value && airportOptions[1]) $("#destination").placeholder=`Ex.: ${airportOptions[1].city} — ${airportOptions[1].airport} (${airportOptions[1].code})`;
     document.dispatchEvent(new CustomEvent('andre:locations',{detail:liveLocations}));
   }catch(e){ showToast('Não foi possível carregar os locais cadastrados.'); }
 }
