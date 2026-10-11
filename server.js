@@ -338,15 +338,15 @@ async function sendBrandedEmail({to,subject,kicker,title,greeting,paragraph,butt
 }
 app.post('/api/auth/register',async(req,res)=>{
   const name=String(req.body.name||'').trim(),email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
-  if(name.length<2||name.length>100||!validEmail(email)||password.length<10||password.length>200)return res.status(400).json({error:'Informe nome, e-mail válido e senha com pelo menos 10 caracteres.'});
+  if(name.length<2||name.length>100||!validEmail(email)||password.length<8||password.length>200)return res.status(400).json({error:'Informe nome, e-mail válido e senha com pelo menos 8 caracteres.'});
   if(!supabase)return res.status(503).json({error:'O cadastro ainda não está conectado ao banco de dados.'});
-  const h=hashPassword(password),passwordHash=`${h.salt}:${h.hash}`;let emailSent=false;
+  const h=hashPassword(password),passwordHash=`${h.salt}:${h.hash}`;
   try{
     const {data:u,error}=await supabase.from('users').insert({name,email,password_hash:passwordHash}).select('id,name,email,password_hash,role,active,created_at').single();
     if(error)throw error;
     localUserMirror(u);
-    if(mailConfigured()){try{const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');await sendBrandedEmail({to:email,subject:'Boas-vindas à André Aéreas',kicker:'BEM-VINDO A BORDO',title:'Sua próxima jornada começa aqui',greeting:name,paragraph:'Sua conta foi criada com sucesso! Agora você pode acessar sua área pessoal e acompanhar suas cotações e informações de viagem.',buttonText:'Acessar minha conta',buttonUrl:baseUrl+'/conta',footnote:'Guarde este e-mail para consultar os dados da sua conta. Se você não criou esta conta, entre em contato com o suporte.'});emailSent=true;}catch(mailError){console.error('Conta criada, mas falhou o e-mail de boas-vindas:',mailError.message);}}
-    res.status(201).json({ok:true,user:{id:Number(u.id),name,email},emailSent});
+    
+    res.status(201).json({ok:true,user:{id:Number(u.id),name,email}});
   }catch(e){console.error('[supabase-auth] register failed:',e.message);const duplicate=e.code==='23505'||/duplicate key|already exists/i.test(e.message||'');res.status(duplicate?409:503).json({error:duplicate?'Este e-mail já está cadastrado.':'Não foi possível criar a conta agora. Tente novamente.'});}
 });
 app.post('/api/auth/login',async(req,res)=>{
@@ -408,7 +408,7 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
 });
 app.post('/api/auth/reset-password',async(req,res)=>{
   const token=String(req.body.token||''),password=String(req.body.password||'');
-  if(password.length<10)return res.status(400).json({error:'A nova senha deve ter pelo menos 10 caracteres.'});
+  if(password.length<8)return res.status(400).json({error:'A nova senha deve ter pelo menos 8 caracteres.'});
   if(!supabase)return res.status(503).json({error:'A recuperação ainda não está conectada ao banco de dados.'});
   const tokenHash=digest(token);
   try{
