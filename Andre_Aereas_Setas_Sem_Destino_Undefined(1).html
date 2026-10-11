@@ -138,7 +138,7 @@
 .destination-grid.jiu-grid .jiu-card .round-arrow{flex-shrink:0;width:32px;height:32px}
 @media(max-width:700px){.destination-grid.jiu-grid .jiu-card{min-height:240px}.destination-grid.jiu-grid .jiu-card>img{width:72%;opacity:1}.destination-grid.jiu-grid .jiu-card::before{background:linear-gradient(90deg,#071629 0%,rgba(7,22,41,.86) 25%,rgba(7,22,41,.58) 50%,rgba(7,22,41,.12) 100%)}.destination-grid.jiu-grid .jiu-card .destination-info{width:66%;padding:16px}.destination-grid.jiu-grid .jiu-card .destination-index{left:16px;top:14px;max-width:60%;font-size:7px}.destination-grid.jiu-grid .jiu-card .destination-info h3{font-size:19px}.destination-grid.jiu-grid .jiu-card .destination-info p{font-size:10px}}
 .site-header .brand .brand-mark{display:grid!important;visibility:visible!important;opacity:1!important;width:42px!important;height:42px!important;min-width:42px!important;flex:0 0 42px!important;background:transparent!important;border:0!important;border-radius:0!important;overflow:visible!important;padding:0!important;color:inherit!important}.site-header .brand .brand-mark svg{display:block!important;visibility:visible!important;opacity:1!important;width:42px!important;height:42px!important;max-width:none!important;flex:none!important}</style>
-</head>
+\n<style id="route-cinema-fix">#route-distance-hud{display:flex!important;opacity:1!important;visibility:visible!important;position:absolute!important;z-index:30!important;left:50%!important;bottom:3%!important;transform:translateX(-50%)!important;min-width:max-content!important;max-width:90%!important;text-align:center!important}#route-distance-value{display:block!important;color:#fff!important;font-size:clamp(22px,3vw,32px)!important;font-weight:700!important}#route-distance-codes{display:block!important}#route-flight-overlay{z-index:20!important}.route-globe.cinema-zoom #route-globe-3d{animation:routeCanvasZoom 2.6s cubic-bezier(.2,.75,.25,1) both;transform-origin:center}.route-globe.cinema-zoom{filter:drop-shadow(0 0 24px #4dcaff66)}@keyframes routeCanvasZoom{0%{transform:scale(1)}35%{transform:scale(1.75)}65%{transform:scale(2.1)}100%{transform:scale(1)}}@media(max-width:760px){#route-distance-hud{bottom:1%!important;padding:7px 10px!important;gap:3px!important}#route-distance-hud small,#route-distance-codes{font-size:8px!important}} </style>\n</head>
 <body>
   <div class="announcement"><span class="pulse"></span> SUA PRÓXIMA HISTÓRIA COMEÇA AQUI <span class="announcement-line"></span><span>Descubra novos horizontes</span></div>
   <header class="site-header">
@@ -462,7 +462,29 @@ window.addEventListener('load', function(){
 });
 </script>
 
-</body>
+<script id="route-cinema-fix-script">
+(function(){
+function init(){
+ const form=document.getElementById('flight-form'),origin=document.getElementById('origin'),dest=document.getElementById('destination'),globe=document.querySelector('.route-globe'),hud=document.getElementById('route-distance-hud'),value=document.getElementById('route-distance-value'),codes=document.getElementById('route-distance-codes'),overlay=document.getElementById('route-flight-overlay');
+ if(!origin||!dest||!globe||!hud||!value)return;
+ const db={GRU:['São Paulo',-23.4356,-46.4731],GIG:['Rio de Janeiro',-22.8099,-43.2505],BSB:['Brasília',-15.8697,-47.9208],CNF:['Belo Horizonte',-19.6338,-43.9689],LIS:['Lisboa',38.7742,-9.1342],CDG:['Paris',49.0097,2.5479],LHR:['Londres',51.47,-.4543],JFK:['Nova York',40.6413,-73.7781],MAD:['Madrid',40.4983,-3.5676],HND:['Tóquio',35.5494,139.7798],DXB:['Dubai',25.2532,55.3657],EZE:['Buenos Aires',-34.8222,-58.5358]};
+ function get(v){const m=(v||'').match(/\(([A-Z]{3})\)/);if(m&&db[m[1]])return {code:m[1],name:db[m[1]][0],lat:db[m[1]][1],lon:db[m[1]][2]};const q=(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();for(const code in db)if(q.includes(db[code][0].normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()))return {code,name:db[code][0],lat:db[code][1],lon:db[code][2]};return null;}
+ function distance(a,b){const r=n=>n*Math.PI/180,dl=r(b.lat-a.lat),dn=r(b.lon-a.lon),h=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dn/2)**2;return 6371*2*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));}
+ let last='';
+ function update(animate){const a=get(origin.value),b=get(dest.value);if(!a||!b){value.textContent='Selecione aeroportos';codes.textContent='DISTÂNCIA INDISPONÍVEL PARA ESSES LOCAIS';hud.style.opacity='1';return;}const km=Math.round(distance(a,b)),key=a.code+'-'+b.code;codes.textContent=a.code+' → '+b.code+' · '+a.name+' — '+b.name;hud.style.opacity='1';if(!animate||last===key){value.textContent=km.toLocaleString('pt-BR')+' km';last=key;return;}last=key;const start=performance.now();function tick(now){const p=Math.min(1,(now-start)/1600),e=1-Math.pow(1-p,4);value.textContent=Math.round(km*e).toLocaleString('pt-BR')+' km';if(p<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);}
+ let pending=false,busy=false;
+ function play(){update(true);if(busy)return;busy=true;globe.classList.remove('cinema-zoom');void globe.offsetWidth;globe.classList.add('cinema-zoom');if(overlay){overlay.classList.remove('fly');void overlay.offsetWidth;overlay.classList.add('fly');}setTimeout(()=>{globe.classList.remove('cinema-zoom');busy=false;},2700);pending=false;}
+ origin.addEventListener('input',()=>update(false));dest.addEventListener('input',()=>update(false));
+ form?.addEventListener('submit',()=>{pending=true;update(false);});
+ const swap=document.getElementById('swap');swap?.addEventListener('click',()=>setTimeout(()=>{update(false);pending=true;},100));
+ if('IntersectionObserver'in window)new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)&&pending)play();},{threshold:.15}).observe(globe);
+ // If the user has already scrolled back to the globe, run on the next route selection.
+ globe.addEventListener('click',()=>{if(pending)play();});
+ update(false);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>\n</body>
 </html>
 <style>
 /* Cinematic aircraft replacement: photographic plane, no hand-drawn SVG geometry */
