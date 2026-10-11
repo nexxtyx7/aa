@@ -461,7 +461,44 @@ window.addEventListener('load', function(){
 });
 </script>
 
-\n</body>
+\n<script id="route-distance-reliable">
+(function(){
+ function start(){
+  const origin=document.getElementById('origin'),dest=document.getElementById('destination');
+  const kmEl=document.getElementById('route-distance-value'),nmEl=document.getElementById('route-distance-nautical'),codesEl=document.getElementById('route-distance-codes'),hud=document.getElementById('route-distance-hud');
+  if(!origin||!dest||!kmEl||!nmEl||!codesEl||!hud)return;
+  const airports={
+   GRU:{name:'São Paulo',lat:-23.4356,lon:-46.4731},GIG:{name:'Rio de Janeiro',lat:-22.8099,lon:-43.2505},BSB:{name:'Brasília',lat:-15.8697,lon:-47.9208},CNF:{name:'Belo Horizonte',lat:-19.6338,lon:-43.9689},
+   LIS:{name:'Lisboa',lat:38.7742,lon:-9.1342},CDG:{name:'Paris',lat:49.0097,lon:2.5479},LHR:{name:'Londres',lat:51.47,lon:-.4543},JFK:{name:'Nova York',lat:40.6413,lon:-73.7781},
+   MAD:{name:'Madrid',lat:40.4983,lon:-3.5676},HND:{name:'Tóquio',lat:35.5494,lon:139.7798},DXB:{name:'Dubai',lat:25.2532,lon:55.3657},EZE:{name:'Buenos Aires',lat:-34.8222,lon:-58.5358}
+  };
+  function airport(raw){
+   const v=(raw||'').trim(),m=v.match(/\(([A-Z]{3})\)/);if(m&&airports[m[1]])return {code:m[1],...airports[m[1]]};
+   const norm=x=>x.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+   for(const code in airports){if(norm(v).includes(norm(airports[code].name)))return {code,...airports[code]};}
+   for(const code in airports){if(norm(v)===norm(code))return {code,...airports[code]};}
+   return null;
+  }
+  function refresh(){
+   hud.style.display='flex';hud.style.opacity='1';hud.style.visibility='visible';
+   const a=airport(origin.value),b=airport(dest.value);
+   if(!a||!b){kmEl.textContent='— km';nmEl.textContent='— milhas náuticas';codesEl.textContent='Selecione aeroportos reconhecidos';return;}
+   const rad=x=>x*Math.PI/180,lat1=rad(a.lat),lat2=rad(b.lat),dlat=rad(b.lat-a.lat),dlon=rad(b.lon-a.lon);
+   const h=Math.sin(dlat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dlon/2)**2;
+   const km=6371*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));
+   kmEl.textContent=Math.round(km).toLocaleString('pt-BR')+' km';
+   nmEl.textContent=Math.round(km/1.852).toLocaleString('pt-BR')+' milhas náuticas';
+   codesEl.textContent=a.code+' → '+b.code+' · '+a.name+' — '+b.name;
+  }
+  ['input','change'].forEach(ev=>{origin.addEventListener(ev,refresh);dest.addEventListener(ev,refresh);});
+  document.getElementById('swap')?.addEventListener('click',()=>setTimeout(refresh,80));
+  document.getElementById('flight-form')?.addEventListener('submit',()=>setTimeout(refresh,0));
+  refresh();
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+</script>
+</body>
 </html>
 <style>
 /* Cinematic aircraft replacement: photographic plane, no hand-drawn SVG geometry */
@@ -492,4 +529,13 @@ window.addEventListener('load', function(){
   left: 0 !important;
   transform: none !important;
 }
+</style>
+
+<style id="route-distance-reliable-style">
+#route-distance-hud{display:flex!important;position:absolute!important;z-index:50!important;left:50%!important;bottom:7%!important;transform:translateX(-50%)!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-width:175px!important;max-width:90%!important;padding:12px 16px!important;border:1px solid #83d5ff66!important;border-radius:12px!important;background:rgba(4,19,34,.94)!important;color:#eaf8ff!important;box-shadow:0 8px 28px #0005!important;opacity:1!important;visibility:visible!important;text-align:center!important;pointer-events:none!important}
+#route-distance-hud small{font-size:8px!important;letter-spacing:1.5px!important;color:#8dcdf2!important}
+#route-distance-value{display:block!important;font-size:clamp(22px,3vw,30px)!important;font-weight:700!important;font-variant-numeric:tabular-nums!important;line-height:1.25!important;color:#fff!important}
+#route-distance-nautical{display:block!important;font-size:11px!important;color:#b8d8ec!important}
+#route-distance-codes{display:block!important;font-size:8px!important;letter-spacing:.5px!important;color:#b1cde1!important}
+@media(max-width:760px){#route-distance-hud{bottom:3%!important;padding:8px 10px!important;gap:3px!important;min-width:150px!important}#route-distance-hud small,#route-distance-codes{font-size:7px!important}#route-distance-nautical{font-size:10px!important}}
 </style>
