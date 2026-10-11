@@ -296,6 +296,25 @@ $$('.jiu-grid .jiu-card').forEach(card => {
   }, true);
 });
 const modal = $("#results-modal");
+// Close the flight-results dialog from the X, the backdrop, or Escape.
+function closeFlightResults() {
+  if (!modal) return;
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+  const details = $("#flight-details");
+  if (details) { details.hidden = true; details.innerHTML = ""; }
+}
+modal.querySelectorAll("[data-close]").forEach(el => {
+  el.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeFlightResults();
+  });
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && modal.classList.contains("open")) closeFlightResults();
+});
 const message = $("#form-message");
 const toast = $("#toast");
 let tripType = "round";
