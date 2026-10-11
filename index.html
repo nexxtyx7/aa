@@ -660,38 +660,40 @@ window.addEventListener('load', function(){
     function animate(now=performance.now()){
       animationId=requestAnimationFrame(animate);
       if(cinematicStart&&camera&&activeRouteCurve){
-        const elapsed=now-cinematicStart,duration=6800,p=Math.min(1,elapsed/duration);
-        const approachEnd=.13,flightEnd=.89;
+        const elapsed=now-cinematicStart,duration=8200,p=Math.min(1,elapsed/duration);
+        const approachEnd=.16,flightEnd=.90;
         routeGroup.updateMatrixWorld(true);
         const toWorld=localPoint=>routeGroup.localToWorld(localPoint.clone());
         const pointAt=t=>activeRouteCurve.getPoint(Math.max(0,Math.min(1,t)));
         const tangentAt=t=>activeRouteCurve.getTangent(Math.max(0,Math.min(1,t))).normalize();
+        const smoothStep=t=>t*t*(3-2*t);
+        const smootherStep=t=>t*t*t*(t*(t*6-15)+10);
         const dronePose=t=>{
-          const local=pointAt(t),localTangent=tangentAt(t);
-          const world=toWorld(local);
+          const world=toWorld(pointAt(t));
           const worldAhead=toWorld(pointAt(Math.min(1,t+.035)));
           const forward=worldAhead.sub(world).normalize();
           const radial=world.clone().normalize();
-          const position=world.clone().add(radial.clone().multiplyScalar(.19)).sub(forward.clone().multiplyScalar(.24));
-          const lookTarget=toWorld(pointAt(Math.min(1,t+.095))).add(radial.clone().multiplyScalar(.025));
+          // Higher chase camera, slightly behind the route, with a clearer downward view.
+          const position=world.clone().add(radial.clone().multiplyScalar(.27)).sub(forward.clone().multiplyScalar(.27));
+          const lookTarget=toWorld(pointAt(Math.min(1,t+.105))).add(radial.clone().multiplyScalar(-.015));
           return {position,lookTarget,up:radial};
         };
         if(p<approachEnd){
-          const pose=dronePose(0),q=p/approachEnd,ease=q*q*(3-2*q);
+          const pose=dronePose(0),q=p/approachEnd,ease=smoothStep(q);
           if(cinematicCameraStart)camera.position.lerpVectors(cinematicCameraStart,pose.position,ease);
           camera.up.lerp(pose.up,ease).normalize();
           camera.lookAt(pose.lookTarget);
           if(flightMarker){flightMarker.position.copy(pointAt(0));flightMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangentAt(0));}
         }else if(p<flightEnd){
-          const t=(p-approachEnd)/(flightEnd-approachEnd),ease=t*t*(3-2*t),pose=dronePose(ease);
-          camera.position.lerp(pose.position,.22);
-          camera.up.lerp(pose.up,.22).normalize();
+          const t=(p-approachEnd)/(flightEnd-approachEnd),ease=smootherStep(t),pose=dronePose(ease);
+          camera.position.lerp(pose.position,.14);
+          camera.up.lerp(pose.up,.14).normalize();
           camera.lookAt(pose.lookTarget);
           if(flightMarker){const local=pointAt(ease),tangent=tangentAt(ease);flightMarker.position.copy(local);flightMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent);const glow=routeGroup.getObjectByName('route-flight-glow');if(glow)glow.position.copy(local);}
         }else{
-          const q=(p-flightEnd)/(1-flightEnd),ease=q*q*(3-2*q),home=cinematicCameraStart||new THREE.Vector3(0,0,4.4);
-          camera.position.lerpVectors(camera.position,home,ease*.22);
-          camera.up.lerp(new THREE.Vector3(0,1,0),ease*.18).normalize();
+          const q=(p-flightEnd)/(1-flightEnd),ease=smoothStep(q),home=cinematicCameraStart||new THREE.Vector3(0,0,4.4);
+          camera.position.lerpVectors(camera.position,home,ease*.16);
+          camera.up.lerp(new THREE.Vector3(0,1,0),ease*.14).normalize();
           camera.lookAt(0,0,0);
         }
         if(p>=1){if(cinematicCameraStart)camera.position.copy(cinematicCameraStart);camera.up.set(0,1,0);camera.lookAt(0,0,0);cinematicCameraStart=null;cinematicStart=0;}
