@@ -262,5 +262,5 @@ app.get('/api/admin/audit',requireAdmin,(req,res)=>res.json(db.prepare('SELECT *
 app.get('/admin',(req,res)=>res.sendFile(path.join(__dirname,'public','admin.html')));
 app.get('/conta',(req,res)=>res.sendFile(path.join(__dirname,'public','conta.html')));
 app.get('/privacidade',(req,res)=>res.sendFile(path.join(__dirname,'public','privacidade.html')));
-app.use((req,res,next)=>{if(req.path.startsWith('/api/')) return next(); res.sendFile(path.join(__dirname,'public','index.html'));});
+res.sendFile(path.join(__dirname,'index.html'));
 app.listen(PORT,()=>console.log(`André Aéreas online em http://localhost:${PORT}`));
