@@ -592,7 +592,7 @@ window.addEventListener('load', function(){
   function normalizeAirportText(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').trim();}
   function parseAirport(value){
     const raw=String(value||'').trim();
-    if(!raw)return {code:'GRU',...airports.GRU};
+    if(!raw)return null;
     const match=raw.match(/(?:\(([A-Z]{3})\)|\b([A-Z]{3})\b)/i);
     const code=(match?.[1]||match?.[2]||'').toUpperCase();
     if(code&&airports[code])return {code,...airports[code]};
