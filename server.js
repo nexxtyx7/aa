@@ -262,34 +262,18 @@ app.get('/api/admin/audit',requireAdmin,(req,res)=>res.json(db.prepare('SELECT *
 function sendPage(res, filename) {
   const publicPath = path.join(__dirname, 'public', filename);
   const rootPath = path.join(__dirname, filename);
-
   res.sendFile(publicPath, (error) => {
     if (!error) return;
-
-    if (error.status !== 404 && error.code !== 'ENOENT') {
-      console.error('Erro ao enviar página:', error.message);
-    }
-
     res.sendFile(rootPath, (rootError) => {
       if (rootError) {
         console.error(`Página não encontrada: ${filename}`);
-        if (!res.headersSent) {
-          res.status(404).send('Página não encontrada. Verifique os arquivos HTML do site.');
-        }
+        if (!res.headersSent) res.status(404).send('Página não encontrada. Verifique os arquivos HTML do site.');
       }
     });
   });
 }
-
-app.get('/admin', (req, res) => sendPage(res, 'admin.html'));
-app.get('/conta', (req, res) => sendPage(res, 'conta.html'));
-app.get('/privacidade', (req, res) => sendPage(res, 'privacidade.html'));
-
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) return next();
-  sendPage(res, 'index.html');
-});
-
-app.listen(PORT, () => {
-  console.log(`André Aéreas online em http://localhost:${PORT}`);
-});
+app.get('/admin',(req,res)=>sendPage(res,'admin.html'));
+app.get('/conta',(req,res)=>sendPage(res,'conta.html'));
+app.get('/privacidade',(req,res)=>sendPage(res,'privacidade.html'));
+app.use((req,res,next)=>{if(req.path.startsWith('/api/')) return next(); sendPage(res,'index.html');});
+app.listen(PORT,()=>console.log(`André Aéreas online em http://localhost:${PORT}`));
