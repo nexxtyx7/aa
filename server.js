@@ -176,6 +176,47 @@ const DEFAULT_AIRPORTS = [
   ['Buenos Aires','Ministro Pistarini International Airport','EZE','Argentina'],
   ['Santiago','Arturo Merino Benítez International Airport','SCL','Chile']
 ].map(([city,airport,code,country],index)=>({id:`default-${code}`,city,airport,code,country,region:'',latitude:null,longitude:null,active:true,default_entry:true,sort_order:index}));
+
+function normalizeLocationText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function resolveAirportCode(value) {
+  const raw = String(value || '').trim();
+  const parenthesizedCode = raw.match(/\(([A-Z]{3})\)/i);
+  if (parenthesizedCode) return parenthesizedCode[1].toUpperCase();
+
+  const upper = raw.toUpperCase();
+  if (/^[A-Z]{3}$/.test(upper)) return upper;
+
+  const query = normalizeLocationText(raw);
+  if (!query) return null;
+
+  const custom = db.prepare('SELECT city, airport, code FROM locations WHERE active=1 ORDER BY city, airport').all();
+  const customCodes = new Set(custom.map(row => String(row.code).toUpperCase()));
+  const locations = [
+    ...custom,
+    ...DEFAULT_AIRPORTS.filter(row => !customCodes.has(row.code))
+  ];
+
+  const fields = row => [row.city, row.airport, row.code].map(normalizeLocationText);
+  const exact = locations.find(row => fields(row).some(field => field === query));
+  if (exact) return String(exact.code).toUpperCase();
+
+  const partial = locations.find(row => {
+    const city = normalizeLocationText(row.city);
+    const airport = normalizeLocationText(row.airport);
+    return (city.length >= 4 && query.includes(city)) ||
+      (airport.length >= 6 && (query.includes(airport) || airport.includes(query)));
+  });
+  return partial ? String(partial.code).toUpperCase() : null;
+}
+
 app.get('/api/locations',(req,res)=>{
   const q=String(req.query.q||'').trim().toLowerCase();
   const custom=db.prepare('SELECT * FROM locations WHERE active=1 ORDER BY city, airport').all().map(row=>({...cleanLocation(row),default_entry:false}));
@@ -191,15 +232,17 @@ app.put('/api/admin/locations/:id',requireAdmin,(req,res)=>{const b=req.body;try
 app.delete('/api/admin/locations/:id',requireAdmin,(req,res)=>{const used=db.prepare('SELECT COUNT(*) c FROM flights WHERE origin_id=? OR destination_id=?').get(req.params.id,req.params.id).c;if(used)return res.status(409).json({error:'Este local já está ligado a voos. Desative-o em vez de apagar.'});db.prepare('DELETE FROM locations WHERE id=?').run(req.params.id);res.json({ok:true});});
 
 app.get('/api/flights', async (req,res)=>{
-  const origin=String(req.query.origin||'').trim().toUpperCase();
-  const destination=String(req.query.destination||'').trim().toUpperCase();
+  const originInput=String(req.query.origin||'').trim();
+  const destinationInput=String(req.query.destination||'').trim();
+  const origin=resolveAirportCode(originInput) || originInput.toUpperCase();
+  const destination=resolveAirportCode(destinationInput) || destinationInput.toUpperCase();
   const departureDate=String(req.query.date||'').trim();
   const returnDate=String(req.query.returnDate||'').trim();
   const tripType=String(req.query.tripType||'round');
   const passengers=Number(req.query.passengers||1);
   const cabin=String(req.query.cabin||'economy').toLowerCase();
   const validDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`))&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
-  if(!/^[A-Z]{3}$/.test(origin)||!/^[A-Z]{3}$/.test(destination)||origin===destination) return res.status(400).json({error:'Informe códigos IATA válidos e diferentes para origem e destino.',results:[],provider:flightProviderStatus()});
+  if(!/^[A-Z]{3}$/.test(origin)||!/^[A-Z]{3}$/.test(destination)||origin===destination) return res.status(400).json({error:'Informe cidades ou aeroportos reconhecidos, ou códigos IATA válidos e diferentes para origem e destino.',results:[],provider:flightProviderStatus()});
   if(!validDate(departureDate)||departureDate<new Date().toISOString().slice(0,10)) return res.status(400).json({error:'A data de ida é inválida ou já passou.',results:[],provider:flightProviderStatus()});
   if(tripType!=='oneway'&&(!validDate(returnDate)||returnDate<departureDate)) return res.status(400).json({error:'Informe uma data de volta válida, igual ou posterior à ida.',results:[],provider:flightProviderStatus()});
   if(!Number.isInteger(passengers)||passengers<1||passengers>9) return res.status(400).json({error:'A quantidade de passageiros deve ser entre 1 e 9.',results:[],provider:flightProviderStatus()});
