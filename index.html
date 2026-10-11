@@ -158,7 +158,7 @@
     <nav class="desktop-nav" aria-label="Navegação principal">
       <a href="#destinos">Destinos</a><a href="#experiencia">Experiência</a><a href="#ofertas">Ofertas</a><a href="#sobre">Nossa essência</a>
     </nav>
-    <div class="header-actions"><a class="social-link" href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer" aria-label="Instagram">◎</a><a class="nav-cta" id="account-cta" href="#reservar">Planejar viagem <span>↗</span></a><button class="menu-toggle" aria-label="Abrir menu" aria-expanded="false">☰</button></div>
+    <div class="header-actions"><a class="social-link" href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer" aria-label="Instagram">◎</a><a class="nav-cta" id="account-cta" href="/conta.html" onclick="window.location.href='/conta.html';return false;">Planejar viagem <span>↗</span></a><button class="menu-toggle" aria-label="Abrir menu" aria-expanded="false">☰</button></div>
   </header>
   <main>
     <section class="hero" id="inicio">
@@ -255,6 +255,8 @@ async function syncAccountHeader(){
   else{cta.innerHTML='Planejar viagem <span>↗</span>';cta.setAttribute('aria-label','Planejar viagem');cta.classList.remove('is-profile');}
 }
 syncAccountHeader();
+// Garante a navegação para a tela de conta mesmo se outro script bloquear o clique.
+document.addEventListener('click',function(event){const cta=event.target.closest('#account-cta');if(!cta)return;event.preventDefault();event.stopPropagation();window.location.assign('/conta.html');},true);
 
 // Os cards de Jiu-Jitsu apenas levam à área de busca.
 // Capturamos o clique antes de outros handlers para impedir que algum código
