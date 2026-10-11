@@ -489,10 +489,36 @@ window.addEventListener('load', function(){
   const THREE=window.THREE;
   let renderer,scene,camera,globe,routeGroup,originDot,destDot,animationId,dragging=false,lastX=0,lastY=0,autoRotate=true;
   const airports={
-    'GRU':{name:'São Paulo',lat:-23.4356,lon:-46.4731},'GIG':{name:'Rio de Janeiro',lat:-22.8099,lon:-43.2505},'BSB':{name:'Brasília',lat:-15.8697,lon:-47.9208},'CNF':{name:'Belo Horizonte',lat:-19.6338,lon:-43.9689},
-    'LIS':{name:'Lisboa',lat:38.7742,lon:-9.1342},'CDG':{name:'Paris',lat:49.0097,lon:2.5479},'LHR':{name:'Londres',lat:51.47,lon:-0.4543},'JFK':{name:'Nova York',lat:40.6413,lon:-73.7781},'MAD':{name:'Madrid',lat:40.4983,lon:-3.5676},'HND':{name:'Tóquio',lat:35.5494,lon:139.7798},'DXB':{name:'Dubai',lat:25.2532,lon:55.3657},'EZE':{name:'Buenos Aires',lat:-34.8222,lon:-58.5358}
+    'GRU':{name:'São Paulo',aliases:['Guarulhos','Sao Paulo'],lat:-23.4356,lon:-46.4731},
+    'GIG':{name:'Rio de Janeiro',aliases:['Rio'],lat:-22.8099,lon:-43.2505},
+    'BSB':{name:'Brasília',aliases:['Brasilia'],lat:-15.8697,lon:-47.9208},
+    'CNF':{name:'Belo Horizonte',aliases:['Confins'],lat:-19.6338,lon:-43.9689},
+    'MCO':{name:'Orlando',aliases:['Orlando, Florida','Orlando Florida'],lat:28.4312,lon:-81.3081},
+    'MIA':{name:'Miami',lat:25.7959,lon:-80.2870},'JFK':{name:'Nova York',aliases:['New York','New York City','Nova Iorque'],lat:40.6413,lon:-73.7781},
+    'LAX':{name:'Los Angeles',lat:33.9416,lon:-118.4085},'ORD':{name:'Chicago',lat:41.9742,lon:-87.9073},'SFO':{name:'São Francisco',aliases:['San Francisco'],lat:37.6213,lon:-122.3790},
+    'LIS':{name:'Lisboa',aliases:['Lisbon'],lat:38.7742,lon:-9.1342},'CDG':{name:'Paris',lat:49.0097,lon:2.5479},'LHR':{name:'Londres',aliases:['London'],lat:51.47,lon:-0.4543},
+    'MAD':{name:'Madrid',lat:40.4983,lon:-3.5676},'FCO':{name:'Roma',aliases:['Rome'],lat:41.8003,lon:12.2389},'AMS':{name:'Amsterdã',aliases:['Amsterdam'],lat:52.3105,lon:4.7683},
+    'FRA':{name:'Frankfurt',lat:50.0379,lon:8.5622},'IST':{name:'Istambul',aliases:['Istanbul'],lat:41.2753,lon:28.7519},'DXB':{name:'Dubai',lat:25.2532,lon:55.3657},
+    'HND':{name:'Tóquio',aliases:['Tokyo'],lat:35.5494,lon:139.7798},'ICN':{name:'Seul',aliases:['Seoul'],lat:37.4602,lon:126.4407},'DEL':{name:'Nova Délhi',aliases:['New Delhi','Delhi'],lat:28.5562,lon:77.1000},
+    'SIN':{name:'Singapura',aliases:['Singapore'],lat:1.3644,lon:103.9915},'SYD':{name:'Sydney',lat:-33.9399,lon:151.1753},'DOH':{name:'Doha',lat:25.2731,lon:51.6081},
+    'EZE':{name:'Buenos Aires',lat:-34.8222,lon:-58.5358},'SCL':{name:'Santiago',aliases:['Santiago do Chile'],lat:-33.3930,lon:-70.7858},'LIM':{name:'Lima',lat:-12.0219,lon:-77.1143},
+    'BOG':{name:'Bogotá',aliases:['Bogota'],lat:4.7016,lon:-74.1469},'PTY':{name:'Cidade do Panamá',aliases:['Panama City'],lat:9.0714,lon:-79.3835},'YYZ':{name:'Toronto',lat:43.6777,lon:-79.6248},
+    'MEX':{name:'Cidade do México',aliases:['Mexico City'],lat:19.4363,lon:-99.0721},'CPT':{name:'Cidade do Cabo',aliases:['Cape Town'],lat:-33.9700,lon:18.5970},'CAI':{name:'Cairo',lat:30.1219,lon:31.4056}
   };
-  function parseAirport(value){const raw=String(value||'').trim();const match=raw.match(/(?:\(([A-Z]{3})\)|\b([A-Z]{3})\b)/i);const code=(match?.[1]||match?.[2]||'').toUpperCase();if(code&&airports[code])return {code,...airports[code]};const q=raw.toLocaleLowerCase('pt-BR');for(const [knownCode,a] of Object.entries(airports))if(q.includes(a.name.toLocaleLowerCase('pt-BR')))return {code:knownCode,...a};if(!raw)return {code:'GRU',...airports.GRU};return {code:code||raw.slice(0,12).toUpperCase(),name:raw,lat:airports.GRU.lat,lon:airports.GRU.lon};}
+  function normalizeAirportText(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').trim();}
+  function parseAirport(value){
+    const raw=String(value||'').trim();
+    if(!raw)return {code:'GRU',...airports.GRU};
+    const match=raw.match(/(?:\(([A-Z]{3})\)|\b([A-Z]{3})\b)/i);
+    const code=(match?.[1]||match?.[2]||'').toUpperCase();
+    if(code&&airports[code])return {code,...airports[code]};
+    const q=normalizeAirportText(raw);
+    for(const [knownCode,a] of Object.entries(airports)){
+      const names=[a.name,...(a.aliases||[])];
+      if(names.some(name=>q===normalizeAirportText(name)||q.includes(normalizeAirportText(name))))return {code:knownCode,...a};
+    }
+    return null;
+  }
   function point(lat,lon,r=1.015){const phi=(90-lat)*Math.PI/180,theta=(lon+180)*Math.PI/180;return new THREE.Vector3(-r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(theta));}
   try{
     renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));renderer.setClearColor(0x000000,0);
@@ -506,10 +532,12 @@ window.addEventListener('load', function(){
     routeGroup=new THREE.Group();scene.add(routeGroup);
     function makeArc(a,b){const av=point(a.lat,a.lon),bv=point(b.lat,b.lon);const mid=av.clone().add(bv).normalize().multiplyScalar(1.22);const curve=new THREE.QuadraticBezierCurve3(av,mid,bv);const line=new THREE.Mesh(new THREE.TubeGeometry(curve,64,.006,5,false),new THREE.MeshBasicMaterial({color:0x68d4ff,transparent:true,opacity:.96}));routeGroup.add(line);const glow=new THREE.Mesh(new THREE.TubeGeometry(curve,64,.016,5,false),new THREE.MeshBasicMaterial({color:0x218dff,transparent:true,opacity:.22}));routeGroup.add(glow);const t=.64,arrowPos=curve.getPoint(t),tangent=curve.getTangent(t).normalize();const arrow=new THREE.Mesh(new THREE.ConeGeometry(.025,.075,12),new THREE.MeshBasicMaterial({color:0xb7f0ff,emissive:0x267eb5,emissiveIntensity:.35}));arrow.position.copy(arrowPos);arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent);routeGroup.add(arrow);return [av,bv];}
     function addDot(pos,color){const dot=new THREE.Mesh(new THREE.SphereGeometry(.027,16,12),new THREE.MeshBasicMaterial({color}));dot.position.copy(pos.clone().normalize().multiplyScalar(1.035));routeGroup.add(dot);const halo=new THREE.Mesh(new THREE.SphereGeometry(.032,16,12),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.09}));halo.position.copy(dot.position);routeGroup.add(halo);}
-    function updateRoute(){if(!routeGroup)return;while(routeGroup.children.length){const obj=routeGroup.children.pop();obj.geometry?.dispose();if(obj.material){if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose());else obj.material.dispose();}}const a=parseAirport(originInput.value),b=parseAirport(destInput.value);makeArc(a,b);addDot(point(a.lat,a.lon),0x9cecff);addDot(point(b.lat,b.lon),0x9cecff);
-      const ol=document.getElementById('route-origin-label'),dl=document.getElementById('route-destination-label');if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a.code;const span=document.createElement('span');span.textContent=a.name;ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b.code;const span=document.createElement('span');span.textContent=b.name;dl.append(small,strong,span);}
-      const midLon=(a.lon+b.lon)/2;globe.rotation.y=-midLon*Math.PI/180;globe.rotation.x=-(a.lat+b.lat)/2*Math.PI/180*.32;atmosphere.rotation.copy(globe.rotation);routeGroup.rotation.copy(globe.rotation);
-    }
+    function updateRoute(){if(!routeGroup)return;while(routeGroup.children.length){const obj=routeGroup.children.pop();obj.geometry?.dispose();if(obj.material){if(Array.isArray(obj.material))obj.material.forEach(m=>m.dispose());else obj.material.dispose();}}const a=parseAirport(originInput.value),b=parseAirport(destInput.value);
+      const ol=document.getElementById('route-origin-label'),dl=document.getElementById('route-destination-label');
+      if(!a||!b){if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a?a.code:'AEROPORTO?';const span=document.createElement('span');span.textContent=a?a.name:'Confira a cidade ou código';ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b?b.code:'AEROPORTO?';const span=document.createElement('span');span.textContent=b?b.name:'Confira a cidade ou código';dl.append(small,strong,span);}return;}
+      makeArc(a,b);addDot(point(a.lat,a.lon),0x9cecff);addDot(point(b.lat,b.lon),0x9cecff);
+      if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a.code;const span=document.createElement('span');span.textContent=a.name;ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b.code;const span=document.createElement('span');span.textContent=b.name;dl.append(small,strong,span);}
+      const midLon=(a.lon+b.lon)/2;globe.rotation.y=(-90-midLon)*Math.PI/180;globe.rotation.x=-(a.lat+b.lat)/2*Math.PI/180*.32;atmosphere.rotation.copy(globe.rotation);routeGroup.rotation.copy(globe.rotation);}
     function resize(){const box=canvas.parentElement.getBoundingClientRect();const w=Math.max(1,box.width),h=Math.max(1,box.height);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
     function animate(){animationId=requestAnimationFrame(animate);if(autoRotate&&!dragging){globe.rotation.y+=.0009;atmosphere.rotation.y=globe.rotation.y;routeGroup.rotation.y=globe.rotation.y;}renderer.render(scene,camera);}
     canvas.style.touchAction='none';canvas.addEventListener('pointerdown',e=>{e.preventDefault();dragging=true;autoRotate=false;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture?.(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!dragging)return;e.preventDefault();const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;globe.rotation.y+=dx*.014;globe.rotation.x+=dy*.014;globe.rotation.x=Math.max(-1.35,Math.min(1.35,globe.rotation.x));atmosphere.rotation.copy(globe.rotation);routeGroup.rotation.copy(globe.rotation)});const stopDrag=e=>{dragging=false;if(e?.pointerId!==undefined&&canvas.hasPointerCapture?.(e.pointerId))canvas.releasePointerCapture(e.pointerId)};canvas.addEventListener('pointerup',stopDrag);canvas.addEventListener('pointercancel',stopDrag);canvas.addEventListener('lostpointercapture',()=>{dragging=false});
