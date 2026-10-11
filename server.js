@@ -166,17 +166,33 @@ const DEFAULT_AIRPORTS = [
   ['Foz do Iguaçu','Aeroporto Internacional de Foz do Iguaçu','IGU','Brasil'],
   ['Londrina','Aeroporto de Londrina','LDB','Brasil'],
   ['Uberlândia','Aeroporto de Uberlândia','UDI','Brasil'],
-  ['Orlando','Orlando International Airport','MCO','Estados Unidos'],
-  ['Miami','Miami International Airport','MIA','Estados Unidos'],
-  ['Nova York','John F. Kennedy International Airport','JFK','Estados Unidos'],
-  ['Lisboa','Aeroporto Humberto Delgado','LIS','Portugal'],
+  ['Orlando','Orlando International Airport','MCO','Estados Unidos',28.4312,-81.3081],
+  ['Miami','Miami International Airport','MIA','Estados Unidos',25.7959,-80.2870],
+  ['Nova York','John F. Kennedy International Airport','JFK','Estados Unidos',40.6413,-73.7781],
+  ['Los Angeles','Los Angeles International Airport','LAX','Estados Unidos',33.9416,-118.4085],
+  ['Chicago','O’Hare International Airport','ORD','Estados Unidos',41.9742,-87.9073],
+  ['São Francisco','San Francisco International Airport','SFO','Estados Unidos',37.6213,-122.3790],
+  ['Atlanta','Hartsfield–Jackson Atlanta International Airport','ATL','Estados Unidos',33.6407,-84.4277],
+  ['Dallas','Dallas/Fort Worth International Airport','DFW','Estados Unidos',32.8998,-97.0403],
+  ['Houston','George Bush Intercontinental Airport','IAH','Estados Unidos',29.9902,-95.3368],
+  ['Boston','Boston Logan International Airport','BOS','Estados Unidos',42.3656,-71.0096],
+  ['Seattle','Seattle–Tacoma International Airport','SEA','Estados Unidos',47.4502,-122.3088],
+  ['Las Vegas','Harry Reid International Airport','LAS','Estados Unidos',36.0840,-115.1537],
+  ['Washington','Washington Dulles International Airport','IAD','Estados Unidos',38.9531,-77.4565],
+  ['Lisboa','Aeroporto Humberto Delgado','LIS','Portugal',38.7742,-9.1342],
+  ['Porto','Aeroporto Francisco Sá Carneiro','OPO','Portugal',41.2481,-8.6814],
+  ['Faro','Aeroporto de Faro','FAO','Portugal',37.0144,-7.9659],
+  ['Doha','Hamad International Airport','DOH','Catar',25.2731,51.6081],
+  ['Moscou','Sheremetyevo International Airport','SVO','Rússia',55.9726,37.4146],
+  ['Moscou','Domodedovo International Airport','DME','Rússia',55.4088,37.9063],
+  ['São Petersburgo','Pulkovo Airport','LED','Rússia',59.8003,30.2625],
   ['Paris','Aeroporto Charles de Gaulle','CDG','França'],
   ['Londres','Heathrow Airport','LHR','Reino Unido'],
   ['Madri','Adolfo Suárez Madrid–Barajas Airport','MAD','Espanha'],
   ['Roma','Leonardo da Vinci–Fiumicino Airport','FCO','Itália'],
   ['Buenos Aires','Ministro Pistarini International Airport','EZE','Argentina'],
   ['Santiago','Arturo Merino Benítez International Airport','SCL','Chile']
-].map(([city,airport,code,country],index)=>({id:`default-${code}`,city,airport,code,country,region:'',latitude:null,longitude:null,active:true,default_entry:true,sort_order:index}));
+].map(([city,airport,code,country,latitude=null,longitude=null],index)=>({id:`default-${code}`,city,airport,code,country,region:'',latitude,longitude,active:true,default_entry:true,sort_order:index}));
 
 function normalizeLocationText(value) {
   return String(value || '')
