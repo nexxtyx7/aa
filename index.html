@@ -531,7 +531,33 @@ window.addEventListener('load', function(){
     'SIN':{name:'Singapura',aliases:['Singapore'],lat:1.3644,lon:103.9915},'SYD':{name:'Sydney',lat:-33.9399,lon:151.1753},'DOH':{name:'Doha',lat:25.2731,lon:51.6081},
     'EZE':{name:'Buenos Aires',lat:-34.8222,lon:-58.5358},'SCL':{name:'Santiago',aliases:['Santiago do Chile'],lat:-33.3930,lon:-70.7858},'LIM':{name:'Lima',lat:-12.0219,lon:-77.1143},
     'BOG':{name:'Bogotá',aliases:['Bogota'],lat:4.7016,lon:-74.1469},'PTY':{name:'Cidade do Panamá',aliases:['Panama City'],lat:9.0714,lon:-79.3835},'YYZ':{name:'Toronto',lat:43.6777,lon:-79.6248},
-    'MEX':{name:'Cidade do México',aliases:['Mexico City'],lat:19.4363,lon:-99.0721},'CPT':{name:'Cidade do Cabo',aliases:['Cape Town'],lat:-33.9700,lon:18.5970},'CAI':{name:'Cairo',lat:30.1219,lon:31.4056}
+    'MEX':{name:'Cidade do México',aliases:['Mexico City'],lat:19.4363,lon:-99.0721},'CPT':{name:'Cidade do Cabo',aliases:['Cape Town'],lat:-33.9700,lon:18.5970},'CAI':{name:'Cairo',lat:30.1219,lon:31.4056},
+    // Cobertura de todos os aeroportos do catálogo padrão brasileiro.
+    'CGH':{name:'São Paulo',aliases:['Congonhas'],lat:-23.6261,lon:-46.6566},
+    'VCP':{name:'Campinas',aliases:['Viracopos'],lat:-23.0074,lon:-47.1345},
+    'SDU':{name:'Rio de Janeiro',aliases:['Santos Dumont'],lat:-22.9105,lon:-43.1631},
+    'POA':{name:'Porto Alegre',aliases:['Salgado Filho'],lat:-29.9944,lon:-51.1714},
+    'CWB':{name:'Curitiba',aliases:['Afonso Pena','São José dos Pinhais'],lat:-25.5285,lon:-49.1758},
+    'FLN':{name:'Florianópolis',aliases:['Hercílio Luz'],lat:-27.6703,lon:-48.5525},
+    'SSA':{name:'Salvador',aliases:['Deputado Luís Eduardo Magalhães'],lat:-12.9086,lon:-38.3225},
+    'REC':{name:'Recife',aliases:['Guararapes'],lat:-8.1265,lon:-34.9236},
+    'FOR':{name:'Fortaleza',aliases:['Pinto Martins'],lat:-3.7763,lon:-38.5326},
+    'NAT':{name:'Natal',aliases:['São Gonçalo do Amarante'],lat:-5.7681,lon:-35.3761},
+    'JPA':{name:'João Pessoa',aliases:['Castro Pinto'],lat:-7.1458,lon:-34.9486},
+    'MCZ':{name:'Maceió',aliases:['Zumbi dos Palmares'],lat:-9.5108,lon:-35.7917},
+    'THE':{name:'Teresina',aliases:['Senador Petrônio Portella'],lat:-5.0599,lon:-42.8235},
+    'SLZ':{name:'São Luís',aliases:['Marechal Cunha Machado'],lat:-2.5854,lon:-44.2341},
+    'MAO':{name:'Manaus',aliases:['Eduardo Gomes'],lat:-3.0386,lon:-60.0497},
+    'PVH':{name:'Porto Velho',aliases:['Governador Jorge Teixeira'],lat:-8.7093,lon:-63.9023},
+    'RBR':{name:'Rio Branco',aliases:['Plácido de Castro'],lat:-9.5830,lon:-67.4836},
+    'MCP':{name:'Macapá',aliases:['Alberto Alcolumbre'],lat:0.0507,lon:-51.0722},
+    'BVB':{name:'Boa Vista',aliases:['Aeroporto Internacional de Boa Vista'],lat:2.8463,lon:-60.6901},
+    'CGR':{name:'Campo Grande',aliases:['Campo Grande, Mato Grosso do Sul'],lat:-20.4687,lon:-54.6727},
+    'CGB':{name:'Cuiabá',aliases:['Marechal Rondon'],lat:-15.6529,lon:-56.1167},
+    'GYN':{name:'Goiânia',aliases:['Santa Genoveva'],lat:-16.6320,lon:-49.2207},
+    'IGU':{name:'Foz do Iguaçu',aliases:['Cataratas'],lat:-25.5961,lon:-54.4872},
+    'LDB':{name:'Londrina',aliases:['Governador José Richa'],lat:-23.3336,lon:-51.1301},
+    'UDI':{name:'Uberlândia',aliases:['Tenente Coronel Aviador César Bombonato'],lat:-18.8836,lon:-48.2259}
   };
   function normalizeAirportText(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').trim();}
   function parseAirport(value){
@@ -547,6 +573,27 @@ window.addEventListener('load', function(){
     }
     return null;
   }
+  function syncCatalogAirports(rows){
+    if(!Array.isArray(rows))return;
+    rows.forEach(row=>{
+      const code=String(row.code||'').trim().toUpperCase();
+      if(!/^[A-Z]{3}$/.test(code))return;
+      const current=airports[code]||{};
+      const lat=Number(row.latitude??row.lat),lon=Number(row.longitude??row.lon);
+      const hasCoords=Number.isFinite(lat)&&Number.isFinite(lon)&&String(row.latitude??row.lat??'').trim()!==''&&String(row.longitude??row.lon??'').trim()!=='';
+      const city=String(row.city||current.name||row.airport||code).trim();
+      const aliases=[...new Set([...(current.aliases||[]),String(row.airport||'').trim()].filter(Boolean))];
+      if(hasCoords){
+        airports[code]={...current,name:city,aliases,lat,lon};
+      }else if(current.lat!=null&&current.lon!=null){
+        airports[code]={...current,name:city,aliases};
+      }
+    });
+    updateRoute();
+  }
+  window.addEventListener('andre:locations',event=>syncCatalogAirports(event.detail));
+  // Também busca o catálogo aqui para cobrir inicialização fora de ordem.
+  fetch('/api/locations').then(response=>response.ok?response.json():[]).then(syncCatalogAirports).catch(()=>{});
   function point(lat,lon,r=1.015){const phi=(90-lat)*Math.PI/180,theta=(lon+180)*Math.PI/180;return new THREE.Vector3(-r*Math.sin(phi)*Math.cos(theta),r*Math.cos(phi),r*Math.sin(phi)*Math.sin(theta));}
   try{
     renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));renderer.setClearColor(0x000000,0);
