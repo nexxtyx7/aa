@@ -158,7 +158,7 @@
     <nav class="desktop-nav" aria-label="Navegação principal">
       <a href="#destinos">Destinos</a><a href="#experiencia">Experiência</a><a href="#ofertas">Ofertas</a><a href="#sobre">Nossa essência</a>
     </nav>
-    <div class="header-actions"><a class="social-link" href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer" aria-label="Instagram">◎</a><a class="nav-cta" id="account-cta" href="/conta.html" onclick="window.location.href='/conta.html';return false;">Planejar viagem <span>↗</span></a><button class="menu-toggle" aria-label="Abrir menu" aria-expanded="false">☰</button></div>
+    <div class="header-actions"><a class="social-link" href="https://www.instagram.com/andre_aereas?psln=anN1OXIyd2J1ZnN3" target="_blank" rel="noopener noreferrer" aria-label="Instagram">◎</a><a class="nav-cta" id="account-cta" href="/conta" onclick="window.location.href='/conta';return false;">Planejar viagem <span>↗</span></a><button class="menu-toggle" aria-label="Abrir menu" aria-expanded="false">☰</button></div>
   </header>
   <main>
     <section class="hero" id="inicio">
@@ -249,14 +249,14 @@ const form = $("#flight-form");
 async function syncAccountHeader(){
   const cta=document.getElementById('account-cta'); if(!cta)return;
   // Define o destino imediatamente para o clique funcionar mesmo se a API demorar.
-  cta.href='conta.html';
+  cta.href='/conta';
   let user=null;try{const r=await fetch('/api/auth/me',{credentials:'same-origin'});const d=await r.json();if(d.authenticated)user=d.user}catch{}
   if(user){cta.innerHTML='<span aria-hidden="true" class="profile-silhouette"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="7.5" r="3.5"></circle><path d="M4.5 21c.5-4.4 3.2-6.7 7.5-6.7s7 2.3 7.5 6.7"></path></svg></span><span class="profile-label">Minha conta</span>';cta.setAttribute('aria-label','Abrir minha conta');cta.classList.add('is-profile');}
   else{cta.innerHTML='Planejar viagem <span>↗</span>';cta.setAttribute('aria-label','Planejar viagem');cta.classList.remove('is-profile');}
 }
 syncAccountHeader();
 // Garante a navegação para a tela de conta mesmo se outro script bloquear o clique.
-document.addEventListener('click',function(event){const cta=event.target.closest('#account-cta');if(!cta)return;event.preventDefault();event.stopPropagation();window.location.assign('/conta.html');},true);
+document.addEventListener('click',function(event){const cta=event.target.closest('#account-cta');if(!cta)return;event.preventDefault();event.stopPropagation();window.location.assign('/conta');},true);
 
 // Os cards de Jiu-Jitsu apenas levam à área de busca.
 // Capturamos o clique antes de outros handlers para impedir que algum código
