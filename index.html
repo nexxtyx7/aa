@@ -429,7 +429,7 @@ function renderResults(response) {
   $$('#flight-results [data-request-card]').forEach(button=>button.addEventListener('click',async()=>{
     const f=flights.find(item=>String(item.id)===button.dataset.requestCard); if(!f)return;
     const tab=window.open('about:blank','_blank');
-    const body={origin:`${f.origin_city||f.origin_code} (${f.origin_code})`,destination:`${f.destination_city||f.destination_code} (${f.destination_code})`,departure_date:f.departure_date||$('#departure').value,return_date:f.return_date||(tripType==='oneway'?null:$('#return').value),passengers:Number(f.passenger_count||$('#passengers').value)};
+    const body={origin:$('#origin').value.trim(),destination:$('#destination').value.trim(),departure_date:f.departure_date||$('#departure').value,return_date:f.return_date||(tripType==='oneway'?null:$('#return').value),passengers:Number(f.passenger_count||$('#passengers').value)};
     if(f.provider_offer_id) body.provider_offer_id=f.provider_offer_id; else body.flight_id=f.id;
     try { const response=await fetch('/api/quotes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const result=await response.json(); if(!response.ok)throw Error(result.error||'Não foi possível registrar a cotação.'); if(tab)tab.location.href=result.whatsapp_url;else window.location.href=result.whatsapp_url; }
     catch(error){if(tab)tab.close();showToast(error.message||'Erro ao preparar a cotação.');}
@@ -446,7 +446,7 @@ function renderResults(response) {
     details.querySelector('.details-close').addEventListener('click',()=>{details.hidden=true;});
     details.querySelector('[data-request-flight]').addEventListener('click',async()=>{
       const tab=window.open('about:blank','_blank');
-      const body={origin:`${f.origin_city} (${f.origin_code})`,destination:`${f.destination_city} (${f.destination_code})`,departure_date:f.departure_date||$('#departure').value,return_date:f.return_date||(tripType==='oneway'?null:$('#return').value),passengers:Number($('#passengers').value)};
+      const body={origin:$('#origin').value.trim(),destination:$('#destination').value.trim(),departure_date:f.departure_date||$('#departure').value,return_date:f.return_date||(tripType==='oneway'?null:$('#return').value),passengers:Number($('#passengers').value)};
       if(f.provider_offer_id) body.provider_offer_id=f.provider_offer_id; else body.flight_id=f.id;
       try { const response=await fetch('/api/quotes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const result=await response.json(); if(!response.ok)throw Error(result.error||'Não foi possível registrar a cotação.'); if(tab)tab.location.href=result.whatsapp_url;else window.location.href=result.whatsapp_url; }
       catch(error){if(tab)tab.close();showToast(error.message||'Erro ao preparar a cotação.');}
