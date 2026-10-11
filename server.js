@@ -230,6 +230,36 @@ const loginAttempts=new Map();
 
 const mailConfigured=()=>Boolean(process.env.MAIL_FROM&&(process.env.BREVO_API_KEY||(process.env.SMTP_HOST&&process.env.SMTP_USER&&process.env.SMTP_PASS)));
 function emailEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+const emailjsConfigured=()=>Boolean(process.env.EMAILJS_SERVICE_ID&&process.env.EMAILJS_TEMPLATE_ID&&process.env.EMAILJS_PUBLIC_KEY);
+async function sendEmailJSReset({to,name,resetLink}) {
+  const templateParams={
+    to_email:to,
+    to_name:name||'',
+    name:name||'',
+    greeting:name||'',
+    subject:'Recuperação de senha · André Aéreas',
+    message:'Recebemos uma solicitação para redefinir a senha da sua conta André Aéreas.',
+    reset_link:resetLink,
+    button_text:'Redefinir minha senha',
+    button_url:resetLink
+  };
+  const payload={
+    service_id:process.env.EMAILJS_SERVICE_ID,
+    template_id:process.env.EMAILJS_TEMPLATE_ID,
+    user_id:process.env.EMAILJS_PUBLIC_KEY,
+    template_params:templateParams
+  };
+  if(process.env.EMAILJS_PRIVATE_KEY) payload.accessToken=process.env.EMAILJS_PRIVATE_KEY;
+  const response=await fetch('https://api.emailjs.com/api/v1.0/email/send',{
+    method:'POST',
+    headers:{'content-type':'application/json','accept':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  if(!response.ok){
+    const details=(await response.text()).slice(0,400);
+    throw new Error('EmailJS API HTTP '+response.status+(details?': '+details:''));
+  }
+}
 async function sendBrandedEmail({to,subject,kicker,title,greeting,paragraph,buttonText,buttonUrl,footnote}) {
   if(!mailConfigured()) return false;
   const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');
@@ -297,18 +327,23 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
     const {error:resetError}=await supabase.from('password_resets').insert({token_hash:tokenHash,user_id:u.id,expires_at:expiresAt,used:0});
     if(resetError)throw resetError;
     db.prepare('INSERT OR REPLACE INTO password_resets(token_hash,user_id,expires_at,used) VALUES(?,?,?,0)').run(tokenHash,Number(u.id),expiresAt);
-    console.info('[password-reset] SMTP configured:',mailConfigured());
-    if(mailConfigured()){
+    console.info('[password-reset] EmailJS configured:',emailjsConfigured(),'legacy mail configured:',mailConfigured());
+    if(emailjsConfigured()||mailConfigured()){
       try{
         const baseUrl=String(process.env.APP_BASE_URL||'https://andre-aereas-40yk.onrender.com').replace(/\/$/,'');
         const link=baseUrl+'/conta?reset='+encodeURIComponent(token);
-        await sendBrandedEmail({to:u.email,subject:'Recuperação de senha · André Aéreas',kicker:'SEGURANÇA DA CONTA',title:'Vamos recuperar seu acesso',greeting:u.name,paragraph:'Recebemos uma solicitação para redefinir a senha da sua conta. Use o botão abaixo para escolher uma nova senha.',buttonText:'Redefinir minha senha',buttonUrl:link,footnote:'Por segurança, este link expira em 30 minutos e só pode ser usado uma vez. Se você não pediu a recuperação, ignore esta mensagem.'});
-        console.info('[password-reset] SMTP accepted recovery email');
+        if(emailjsConfigured()){
+          await sendEmailJSReset({to:u.email,name:u.name,resetLink:link});
+          console.info('[password-reset] EmailJS accepted recovery email');
+        }else{
+          await sendBrandedEmail({to:u.email,subject:'Recuperação de senha · André Aéreas',kicker:'SEGURANÇA DA CONTA',title:'Vamos recuperar seu acesso',greeting:u.name,paragraph:'Recebemos uma solicitação para redefinir a senha da sua conta. Use o botão abaixo para escolher uma nova senha.',buttonText:'Redefinir minha senha',buttonUrl:link,footnote:'Por segurança, este link expira em 30 minutos e só pode ser usado uma vez. Se você não pediu a recuperação, ignore esta mensagem.'});
+          console.info('[password-reset] legacy mail provider accepted recovery email');
+        }
         return res.json({ok:true,message:'Um e-mail de recuperação foi enviado para sua conta.'});
-      }catch(err){console.error('Falha no envio de recuperação:',err.message);return res.status(503).json({error:'Não foi possível enviar o e-mail agora. Confira as configurações SMTP no Render e tente novamente.'});}
+      }catch(err){console.error('Falha no envio de recuperação:',err.message);return res.status(503).json({error:'Não foi possível enviar o e-mail agora. Confira as configurações do EmailJS no Render e tente novamente.'});}
     }
     if(process.env.NODE_ENV!=='production'&&process.env.EXPOSE_DEV_RESET_TOKEN==='true')return res.json({...generic,devToken:token});
-    return res.status(503).json({error:'A recuperação por e-mail ainda não está configurada. Configure SMTP_HOST, SMTP_USER, SMTP_PASS e MAIL_FROM no ambiente do servidor.'});
+    return res.status(503).json({error:'Configure EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID e EMAILJS_PUBLIC_KEY no ambiente do servidor do Render.'});
   }catch(error){console.error('[supabase-auth] password reset request failed:',error.message);return res.status(503).json({error:'Não foi possível processar a recuperação agora. Tente novamente.'});}
 });
 app.post('/api/auth/reset-password',async(req,res)=>{
