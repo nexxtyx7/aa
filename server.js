@@ -180,7 +180,7 @@ const DEFAULT_AIRPORTS = [
 function normalizeLocationText(value) {
   return String(value || '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
@@ -188,7 +188,7 @@ function normalizeLocationText(value) {
 
 function resolveAirportCode(value) {
   const raw = String(value || '').trim();
-  const parenthesizedCode = raw.match(/\\(([A-Z]{3})\\)/i);
+  const parenthesizedCode = raw.match(/\(([A-Z]{3})\)/i);
   if (parenthesizedCode) return parenthesizedCode[1].toUpperCase();
 
   const upper = raw.toUpperCase();
