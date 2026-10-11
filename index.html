@@ -543,7 +543,7 @@ window.addEventListener('load', function(){
   if(!canvas) return;
   if(!window.THREE){ canvas.dataset.globePending='1'; setTimeout(function(){ if(window.THREE && canvas.dataset.globePending==='1'){ canvas.dataset.globePending='0'; window.dispatchEvent(new Event('load')); } },900); return; }
   const THREE=window.THREE;
-  let renderer,scene,camera,globe,routeGroup,originDot,destDot,animationId,dragging=false,lastX=0,lastY=0,autoRotate=true,activeRouteCurve=null,flightMarker=null,cinematicStart=0,cinematicDistanceKm=0,lastCinematicRoute='',distanceAnimationFrame=0;
+  let renderer,scene,camera,globe,routeGroup,originDot,destDot,animationId,dragging=false,lastX=0,lastY=0,autoRotate=true,activeRouteCurve=null,flightMarker=null,cinematicStart=0,cinematicDistanceKm=0,lastCinematicRoute='',distanceAnimationFrame=0,cinematicCameraStart=null;
   const airports={
     'GRU':{name:'São Paulo',aliases:['Guarulhos','Sao Paulo'],lat:-23.4356,lon:-46.4731},
     'AJU':{name:'Aracaju',aliases:['Aeroporto de Aracaju','Santa Maria'],lat:-10.9840,lon:-37.0703},
@@ -656,8 +656,49 @@ window.addEventListener('load', function(){
       if(ol){ol.replaceChildren();const small=document.createElement('small');small.textContent='IDA · ORIGEM';const strong=document.createElement('strong');strong.textContent=a.code;const span=document.createElement('span');span.textContent=a.name;ol.append(small,strong,span);}if(dl){dl.replaceChildren();const small=document.createElement('small');small.textContent='VOLTA · DESTINO';const strong=document.createElement('strong');strong.textContent=b.code;const span=document.createElement('span');span.textContent=b.name;dl.append(small,strong,span);}
       const midLon=(a.lon+b.lon)/2;globe.rotation.y=(-90-midLon)*Math.PI/180;globe.rotation.x=-(a.lat+b.lat)/2*Math.PI/180*.32;atmosphere.rotation.copy(globe.rotation);routeGroup.rotation.copy(globe.rotation);playCinematicRoute(a,b);}
     function resize(){const box=canvas.parentElement.getBoundingClientRect();const w=Math.max(1,box.width),h=Math.max(1,box.height);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
-    function playCinematicRoute(a,b){const routeKey=a.code+'>'+b.code;if(routeKey===lastCinematicRoute)return;lastCinematicRoute=routeKey;const rad=value=>value*Math.PI/180,lat1=rad(a.lat),lat2=rad(b.lat),dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon),h=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;cinematicDistanceKm=6371*2*Math.atan2(Math.sqrt(Math.min(1,Math.max(0,h))),Math.sqrt(1-Math.min(1,Math.max(0,h))));cinematicStart=performance.now();const kmEl=document.getElementById('route-distance-km'),nmEl=document.getElementById('route-distance-nautical');if(!kmEl||!nmEl)return;cancelAnimationFrame(distanceAnimationFrame);const started=performance.now(),duration=2100,target=cinematicDistanceKm;function roll(now){const p=Math.min(1,(now-started)/duration),ease=1-Math.pow(1-p,4),flicker=(1-p)*Math.random()*Math.min(target*.9,8000),value=Math.max(0,Math.round(target*ease+flicker));kmEl.textContent=value.toLocaleString('pt-BR')+' km';nmEl.textContent=Math.round(value/1.852).toLocaleString('pt-BR')+' milhas náuticas';if(p<1)distanceAnimationFrame=requestAnimationFrame(roll);else{kmEl.textContent=Math.round(target).toLocaleString('pt-BR')+' km';nmEl.textContent=Math.round(target/1.852).toLocaleString('pt-BR')+' milhas náuticas';}}distanceAnimationFrame=requestAnimationFrame(roll);}
-    function animate(now=performance.now()){animationId=requestAnimationFrame(animate);if(cinematicStart&&camera){const p=Math.min(1,(now-cinematicStart)/3800),zoom=p<.48?p/.48:(1-p)/.52;camera.position.z=4.4-1.75*Math.max(0,Math.min(1,zoom));if(activeRouteCurve&&flightMarker){const flightP=Math.min(1,p*1.12),pointOnRoute=activeRouteCurve.getPoint(flightP),tangent=activeRouteCurve.getTangent(flightP).normalize();flightMarker.position.copy(pointOnRoute);flightMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent);const glow=routeGroup.getObjectByName('route-flight-glow');if(glow)glow.position.copy(pointOnRoute);}if(p>=1){camera.position.z=4.4;cinematicStart=0;}}if(autoRotate&&!dragging){globe.rotation.y+=.0009;atmosphere.rotation.y=globe.rotation.y;routeGroup.rotation.y=globe.rotation.y;}renderer.render(scene,camera);}
+    function playCinematicRoute(a,b){const routeKey=a.code+'>'+b.code;if(routeKey===lastCinematicRoute)return;lastCinematicRoute=routeKey;cinematicCameraStart=camera?camera.position.clone():new THREE.Vector3(0,0,4.4);const rad=value=>value*Math.PI/180,lat1=rad(a.lat),lat2=rad(b.lat),dLat=rad(b.lat-a.lat),dLon=rad(b.lon-a.lon),h=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;cinematicDistanceKm=6371*2*Math.atan2(Math.sqrt(Math.min(1,Math.max(0,h))),Math.sqrt(1-Math.min(1,Math.max(0,h))));cinematicStart=performance.now();const kmEl=document.getElementById('route-distance-km'),nmEl=document.getElementById('route-distance-nautical');if(!kmEl||!nmEl)return;cancelAnimationFrame(distanceAnimationFrame);const started=performance.now(),duration=2100,target=cinematicDistanceKm;function roll(now){const p=Math.min(1,(now-started)/duration),ease=1-Math.pow(1-p,4),flicker=(1-p)*Math.random()*Math.min(target*.9,8000),value=Math.max(0,Math.round(target*ease+flicker));kmEl.textContent=value.toLocaleString('pt-BR')+' km';nmEl.textContent=Math.round(value/1.852).toLocaleString('pt-BR')+' milhas náuticas';if(p<1)distanceAnimationFrame=requestAnimationFrame(roll);else{kmEl.textContent=Math.round(target).toLocaleString('pt-BR')+' km';nmEl.textContent=Math.round(target/1.852).toLocaleString('pt-BR')+' milhas náuticas';}}distanceAnimationFrame=requestAnimationFrame(roll);}
+    function animate(now=performance.now()){
+      animationId=requestAnimationFrame(animate);
+      if(cinematicStart&&camera&&activeRouteCurve){
+        const elapsed=now-cinematicStart,duration=6800,p=Math.min(1,elapsed/duration);
+        const approachEnd=.13,flightEnd=.89;
+        routeGroup.updateMatrixWorld(true);
+        const toWorld=localPoint=>routeGroup.localToWorld(localPoint.clone());
+        const pointAt=t=>activeRouteCurve.getPoint(Math.max(0,Math.min(1,t)));
+        const tangentAt=t=>activeRouteCurve.getTangent(Math.max(0,Math.min(1,t))).normalize();
+        const dronePose=t=>{
+          const local=pointAt(t),localTangent=tangentAt(t);
+          const world=toWorld(local);
+          const worldAhead=toWorld(pointAt(Math.min(1,t+.035)));
+          const forward=worldAhead.sub(world).normalize();
+          const radial=world.clone().normalize();
+          const position=world.clone().add(radial.clone().multiplyScalar(.19)).sub(forward.clone().multiplyScalar(.24));
+          const lookTarget=toWorld(pointAt(Math.min(1,t+.095))).add(radial.clone().multiplyScalar(.025));
+          return {position,lookTarget,up:radial};
+        };
+        if(p<approachEnd){
+          const pose=dronePose(0),q=p/approachEnd,ease=q*q*(3-2*q);
+          if(cinematicCameraStart)camera.position.lerpVectors(cinematicCameraStart,pose.position,ease);
+          camera.up.lerp(pose.up,ease).normalize();
+          camera.lookAt(pose.lookTarget);
+          if(flightMarker){flightMarker.position.copy(pointAt(0));flightMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangentAt(0));}
+        }else if(p<flightEnd){
+          const t=(p-approachEnd)/(flightEnd-approachEnd),ease=t*t*(3-2*t),pose=dronePose(ease);
+          camera.position.lerp(pose.position,.22);
+          camera.up.lerp(pose.up,.22).normalize();
+          camera.lookAt(pose.lookTarget);
+          if(flightMarker){const local=pointAt(ease),tangent=tangentAt(ease);flightMarker.position.copy(local);flightMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent);const glow=routeGroup.getObjectByName('route-flight-glow');if(glow)glow.position.copy(local);}
+        }else{
+          const q=(p-flightEnd)/(1-flightEnd),ease=q*q*(3-2*q),home=cinematicCameraStart||new THREE.Vector3(0,0,4.4);
+          camera.position.lerpVectors(camera.position,home,ease*.22);
+          camera.up.lerp(new THREE.Vector3(0,1,0),ease*.18).normalize();
+          camera.lookAt(0,0,0);
+        }
+        if(p>=1){if(cinematicCameraStart)camera.position.copy(cinematicCameraStart);camera.up.set(0,1,0);camera.lookAt(0,0,0);cinematicCameraStart=null;cinematicStart=0;}
+      }
+      if(autoRotate&&!dragging){globe.rotation.y+=.0009;atmosphere.rotation.y=globe.rotation.y;routeGroup.rotation.y=globe.rotation.y;}
+      renderer.render(scene,camera);
+    }
     canvas.style.touchAction='none';canvas.addEventListener('pointerdown',e=>{e.preventDefault();dragging=true;autoRotate=false;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture?.(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!dragging)return;e.preventDefault();const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;globe.rotation.y+=dx*.014;globe.rotation.x+=dy*.014;globe.rotation.x=Math.max(-1.35,Math.min(1.35,globe.rotation.x));atmosphere.rotation.copy(globe.rotation);routeGroup.rotation.copy(globe.rotation)});const stopDrag=e=>{dragging=false;if(e?.pointerId!==undefined&&canvas.hasPointerCapture?.(e.pointerId))canvas.releasePointerCapture(e.pointerId)};canvas.addEventListener('pointerup',stopDrag);canvas.addEventListener('pointercancel',stopDrag);canvas.addEventListener('lostpointercapture',()=>{dragging=false});
     originInput.addEventListener('input',updateRoute);destInput.addEventListener('input',updateRoute);document.getElementById('swap')?.addEventListener('click',()=>setTimeout(updateRoute,0));
     window.addEventListener('resize',resize);resize();updateRoute();animate();
