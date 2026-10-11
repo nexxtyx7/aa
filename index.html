@@ -639,21 +639,38 @@ window.addEventListener('load', function(){
   window.__aaFlightLoaderInstalled=true;
   var overlay=document.getElementById('aa-flight-loader');
   if(!overlay)return;
-  var active=0,hideTimer=null;
+  var active=0,hideTimer=null,safetyTimer=null;
   function show(){
     clearTimeout(hideTimer);
+    clearTimeout(safetyTimer);
     overlay.classList.add('is-visible');
     overlay.setAttribute('aria-hidden','false');
+    safetyTimer=setTimeout(function(){
+      active=0;
+      overlay.classList.remove('is-visible');
+      overlay.setAttribute('aria-hidden','true');
+    },45000);
   }
   function hide(){
     active=Math.max(0,active-1);
     if(active===0){
       clearTimeout(hideTimer);
+      clearTimeout(safetyTimer);
       hideTimer=setTimeout(function(){
         if(active===0){overlay.classList.remove('is-visible');overlay.setAttribute('aria-hidden','true');}
       },220);
     }
   }
+  // Show immediately when a valid flight search is submitted, rather than waiting for fetch.
+  var bookingForm=document.querySelector('.booking-card form')||document.querySelector('#booking-form')||document.querySelector('form');
+  if(bookingForm)bookingForm.addEventListener('submit',function(){
+    var origin=document.getElementById('origin'),destination=document.getElementById('destination'),departure=document.getElementById('departure'),ret=document.getElementById('return');
+    if(!origin||!destination||!departure)return;
+    var tripType=(document.querySelector('[name="tripType"]:checked')||{}).value||window.tripType||'oneway';
+    if(!origin.value.trim()||!destination.value.trim()||origin.value.trim().toLowerCase()===destination.value.trim().toLowerCase()||!departure.value)return;
+    if(tripType!=='oneway'&&(!ret||!ret.value||ret.value<departure.value))return;
+    show();
+  },true);
   var nativeFetch=window.fetch.bind(window);
   window.fetch=function(input,init){
     var url=typeof input==='string'?input:(input&&input.url)||'';
