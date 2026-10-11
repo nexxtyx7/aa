@@ -415,9 +415,12 @@ app.post('/api/auth/reset-password',async(req,res)=>{
 app.post('/api/quotes', requireUser, async (req,res)=>{
   const u=req.user,b=req.body||{};
   const origin=String(b.origin||'').trim().slice(0,120),destination=String(b.destination||'').trim().slice(0,120);
-  const date=String(b.departure_date||''),ret=String(b.return_date||'')||null,passengers=Number(b.passengers);
+  // Providers may return ISO timestamps; quote validation and storage use calendar dates.
+  const date=String(b.departure_date||'').trim().slice(0,10),retRaw=String(b.return_date||'').trim(),ret=retRaw?retRaw.slice(0,10):null,passengers=Number(b.passengers);
   const validIsoDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(`${value}T00:00:00Z`))&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
-  if(!origin||!destination||origin===destination||!validIsoDate(date)||date<new Date().toISOString().slice(0,10)||!Number.isInteger(passengers)||passengers<1||passengers>9) return res.status(400).json({error:'Confira origem, destino, data e quantidade de passageiros.'});
+  const routeKey=value=>{const code=(value.match(/\(([A-Z]{3})\)/i)||[])[1];return code?code.toUpperCase():value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();};
+  const todayInBrazil=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  if(!origin||!destination||routeKey(origin)===routeKey(destination)||!validIsoDate(date)||date<todayInBrazil||!Number.isInteger(passengers)||passengers<1||passengers>9) return res.status(400).json({error:'Confira origem, destino, data e quantidade de passageiros.'});
   if(ret&&(!validIsoDate(ret)||ret<date)) return res.status(400).json({error:'A data de volta deve ser válida e igual ou posterior à ida.'});
   let flight=null,providerFlight=null,flightId=null;
   if(b.provider_offer_id){
